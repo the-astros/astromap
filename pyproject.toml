@@ -15,6 +15,7 @@ black = "^24.10.0"
 mypy = "^1.13.0"
 flake8 = "^7.1.1"
 isort = "^5.13.2"
+pytest = "^8.3.3"
 
 [build-system]
 requires = ["poetry-core"]
@@ -23,11 +24,12 @@ build-backend = "poetry.core.masonry.api"
 [tool.mypy]
 python_version = "3.12"
 warn_return_any = true
+exclude = ["./venv"]
 ignore_missing_imports = true
 
 [tool.black]
 line-length = 80
-target-version = ['py312']
+target-version = ["py312"]
 
 [tool.isort]
 line_length = 80

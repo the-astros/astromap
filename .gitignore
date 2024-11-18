@@ -1,1 +1,4 @@
 /.venv
+/build
+/.mypy_cache
+__pycache__

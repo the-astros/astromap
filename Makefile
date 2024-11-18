@@ -1,12 +1,13 @@
 # run 'make help' in the terminal to see a list of script options
 
-SHELL := /bin/bash
+SHELL:=/bin/bash
 
 PACKAGE=astromap
+PACKAGE_DIR=astromap
 VERSION:=0.1.0
 REPO:=ghcr.io/the-astros
 TAG:=$(REPO)/$(PACKAGE):$(VERSION)
-WORKSPACE=/home/$(USERNAME)/work
+WORKSPACE=/opt/work
 
 .PHONY: help
 help: ## Show help message
@@ -26,6 +27,14 @@ run: ## get shell into container
 		--name $(PACKAGE) \
 		$(TAG) \
 		/bin/bash
+
+.PHONY: install
+install: image ## install local .venv
+	podman run --rm \
+		--volume $(PWD):$(WORKSPACE) \
+		--name $(PACKAGE) \
+		$(TAG) \
+		/bin/bash -c "poetry install"
 
 .PHONY: dev
 dev: ## get shell into container with local disk mounted
@@ -48,7 +57,7 @@ image: ## builds the container image
 		.
 
 .PHONY: clean-image
-clean-image: ## builds the container image without cache
+clean-image: clean ## builds the container image without cache
 	podman build \
 		--pull \
 		--no-cache \
@@ -56,14 +65,27 @@ clean-image: ## builds the container image without cache
 		--tag $(TAG) \
 		.
 
-.PHONY: validate
-validate: image ## runs pytest to validate in podman container
+.PHONY: cairo-sample
+cairo-sample: ## generate sample png with cairo
 	podman run --rm -it \
+		--volume $(PWD):$(WORKSPACE) \
 		--name $(PACKAGE) \
 		$(TAG) \
-		/bin/bash -ic \
-			"isort -c . \
-				&& black --check . \
-				&& flake8 ./$(PACKAGE_DIR) \
-				&& mypy -p $(PACKAGE_DIR) \
-				&& pytest"
+		/bin/bash -c "poetry run python tests/cairo_sample.py"
+
+.PHONY: validate
+validate: image ## runs pytest to validate in podman container
+	podman run --rm \
+		--volume $(PWD):$(WORKSPACE) \
+		--name $(PACKAGE) \
+		$(TAG) \
+		/bin/bash -c "poetry run isort -c . \
+			&& poetry run black --check . \
+			&& poetry run flake8 \
+			&& poetry run mypy -p $(PACKAGE_DIR) \
+			&& poetry run pytest"
+
+.PHONY: clean
+clean: ## remove venv & build artifacts
+	rm -rf .venv
+	rm -rf build

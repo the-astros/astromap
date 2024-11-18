@@ -1,0 +1,11 @@
+[flake8]
+max-line-length = 80
+docstring_convention = all
+exclude =
+    .git,
+    .venv,
+    __pycache__,
+    .mypy_cache,
+    build,
+    dist
+black-config = pyproject.toml

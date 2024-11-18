@@ -16,6 +16,10 @@ RUN apt-get update \
     sudo \
   && rm -rf /var/lib/apt/lists/*
 
+# setup bashrc
+RUN echo "source /etc/profile.d/bash_completion.sh" >> /root/.bashrc \
+  && echo "poetry shell" >> /root/.bashrc
+
 # setup project workspace
 ARG WORKSPACE=/opt/work
 RUN mkdir -p ${WORKSPACE}
