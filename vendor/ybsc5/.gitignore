@@ -1,2 +1,3 @@
-# ignore uncompressed ascii data file
-/ybsc5
+# ignore intermediate files
+/catalog-with-header
+/readme-with-row-labels
