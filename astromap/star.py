@@ -1,15 +1,6 @@
-from dataclasses import InitVar, dataclass
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final, TypeAlias
-
-
-class MultipleStarCode(StrEnum):
-    A = "A"  # Astrometric binary
-    D = "D"  # Duplicity discovered by occultation
-    I = "I"  # Innes, Southern Double Star Catalogue (1927)
-    R = "R"  # Rossiter, Michigan Publ. 9, 1955
-    S = "S"  # Duplicity discovered by speckle interferometry
-    W = "W"  # Worley (1978) update of the IDS
 
 
 class DeclinationSign(StrEnum):
@@ -32,19 +23,18 @@ class ProperMotion:
     declination: float
 
 
-GalacticCoordinates: TypeAlias = tuple[float, float]  # longitude, latitude
-
-
 @dataclass
 class BrightStar:
+    """
+    parameters of a star from the bright star catalog
+
+    - all coordinates in the j2000 epoch in the fk5 reference frame
+    """
     number: int  # bright star catalog number
     name: str | None
-    multiple: MultipleStarCode | None
-    b1900: EquatorialCoordinates
-    j2000: EquatorialCoordinates
-    j2000_motion: ProperMotion
-    galactic: GalacticCoordinates
-    magnitude: float  # visual magnitude
+    magnitude: float  # apparent visual magnitude
+    equatorial: EquatorialCoordinates
+    proper: ProperMotion
     spectral: str | None  # spectral type
 
 
@@ -56,25 +46,9 @@ def star_from_catalog(row: str) -> BrightStar | None:
     try:
         number: int = int(row[0:4], base=10)
         name: str | None = (
-            row[4:14].strip() if len(row[4:14].strip()) > 0 else None
+            " ".join(row[4:14].strip().split()) if len(row[4:14].strip()) > 0 else None
         )
-        multiple: MultipleStarCode | None = (
-            MultipleStarCode(row[43]) if row[43] in MultipleStarCode else None
-        )
-        b1900: EquatorialCoordinates = EquatorialCoordinates(
-            right_ascension=(
-                float(row[60:62]),
-                float(row[62:64]),
-                float(row[64:68]),
-            ),
-            declination=(
-                DeclinationSign(row[68]),
-                float(row[69:71]),
-                float(row[71:73]),
-                float(row[73:75]),
-            ),
-        )
-        j2000: EquatorialCoordinates = EquatorialCoordinates(
+        equatorial: EquatorialCoordinates = EquatorialCoordinates(
             right_ascension=(
                 float(row[75:77]),
                 float(row[77:79]),
@@ -87,17 +61,11 @@ def star_from_catalog(row: str) -> BrightStar | None:
                 float(row[88:90]),
             ),
         )
-        galactic: GalacticCoordinates = GalacticCoordinates(
-            (
-                float(row[90:96]),
-                float(row[96:102]),
-            )
-        )
         magnitude: float = float(row[102:107])
         spectral: str | None = row[127:147].strip()
         if len(spectral) < 1:
             spectral = None
-        j2000_motion: ProperMotion = ProperMotion(
+        proper: ProperMotion = ProperMotion(
             float(row[148:154]),
             float(row[154:160]),
         )
@@ -109,11 +77,8 @@ def star_from_catalog(row: str) -> BrightStar | None:
     return BrightStar(
         number=number,
         name=name,
-        multiple=multiple,
-        b1900=b1900,
-        j2000=j2000,
-        j2000_motion=j2000_motion,
-        galactic=galactic,
         magnitude=magnitude,
+        equatorial=equatorial,
+        proper=proper,
         spectral=spectral,
     )
