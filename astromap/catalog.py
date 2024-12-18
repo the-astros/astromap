@@ -1,3 +1,4 @@
+from operator import attrgetter
 from pathlib import Path
 from typing import TextIO
 
@@ -17,3 +18,18 @@ class BrightStarCatalog:
             if star is not None:
                 self._stars[star.number] = star
 
+        self._magnitudes: list[tuple[float, int]] = [
+            (star.magnitude, star.number)
+            for star in sorted(
+                self._stars.values(), key=attrgetter("magnitude")
+            )
+        ]
+
+    def __getitem__(self, i: int) -> BrightStar:
+        return self._stars[i]
+
+    def __len__(self) -> int:
+        return len(self._stars)
+
+    def bright(self, n: int) -> BrightStar:
+        return self._stars[self._magnitudes[n][1]]

@@ -26,6 +26,12 @@ class EquatorialCoordinates:
     declination: tuple[DeclinationSign, float, float, float]
 
 
+@dataclass
+class ProperMotion:
+    right_ascension: float
+    declination: float
+
+
 GalacticCoordinates: TypeAlias = tuple[float, float]  # longitude, latitude
 
 
@@ -36,6 +42,7 @@ class BrightStar:
     multiple: MultipleStarCode | None
     b1900: EquatorialCoordinates
     j2000: EquatorialCoordinates
+    j2000_motion: ProperMotion
     galactic: GalacticCoordinates
     magnitude: float  # visual magnitude
     spectral: str | None  # spectral type
@@ -90,6 +97,10 @@ def star_from_catalog(row: str) -> BrightStar | None:
         spectral: str | None = row[127:147].strip()
         if len(spectral) < 1:
             spectral = None
+        j2000_motion: ProperMotion = ProperMotion(
+            float(row[148:154]),
+            float(row[154:160]),
+        )
 
     except ValueError as error:
         print(f"failed to parse row: {row} \n\t{error}")
@@ -101,6 +112,7 @@ def star_from_catalog(row: str) -> BrightStar | None:
         multiple=multiple,
         b1900=b1900,
         j2000=j2000,
+        j2000_motion=j2000_motion,
         galactic=galactic,
         magnitude=magnitude,
         spectral=spectral,
