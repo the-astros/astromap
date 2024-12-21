@@ -24,7 +24,18 @@ class StarMap:
         self._star_base: float = 6.0
         self._star_k: float = 0.005
 
-        self._star_color: tuple[float, float, float, float] = (0, 0, 0, 1)
+        self._field_color: tuple[float, float, float, float] = (
+            0.1,
+            0.0,
+            0.2,
+            1.0,
+        )
+        self._star_color: tuple[float, float, float, float] = (
+            1.0,
+            1.0,
+            0.8,
+            1.0,
+        )
         self._star_stroke: float = 0.008
 
     def render_map(self, context: cairo.Context) -> None:
@@ -33,7 +44,7 @@ class StarMap:
         context.scale(self._map_scale, self._map_scale)
 
         # draw field
-        context.set_source_rgba(0, 0, 0, 0.2)
+        context.set_source_rgba(*self._field_color)
         context.rectangle(0, 0, math.pi * 2, math.pi)
         context.fill()
 
