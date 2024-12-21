@@ -75,13 +75,8 @@ def polar_from_equatorial(eq_coords: EquatorialCoordinates) -> PolarCoordinates:
     # convert degrees, minutes, seconds to digital degrees and then to radians
     zenith: float = math.radians(
         eq_coords.declination[1]  # already degrees
-        + (
-            (
-                (eq_coords.declination[2] * 60)  # minutes to seconds
-                + eq_coords.declination[3]  # already seconds
-            )
-        )
-        * (15 / 3600)  # seconds to degrees
+        + (eq_coords.declination[2] / 60)  # minutes to degrees
+        + (eq_coords.declination[3] / 3600)  # seconds to degrees
     )
 
     # convert offset from equator to north pole

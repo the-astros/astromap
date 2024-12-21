@@ -1,5 +1,6 @@
 import os
 from typing import Callable
+import math
 
 import cairo
 
@@ -7,7 +8,7 @@ type Drawer = Callable[[cairo.Context, int, int], str]
 
 
 def render_png(drawer: Drawer):
-    width, height = 256, 256
+    width, height = 1024, 512
 
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
     cr = cairo.Context(surface)
@@ -31,7 +32,8 @@ def render_png(drawer: Drawer):
 def drawer(context: cairo.Context, width: int, height: int) -> str:
     x, y, x1, y1 = 0.1, 0.5, 0.4, 0.9
     x2, y2, x3, y3 = 0.6, 0.1, 0.9, 0.5
-    context.scale(200, 200)
+    context.translate(16, 16)
+    context.scale(height, height)
     context.set_line_width(0.04)
     context.move_to(x, y)
     context.curve_to(x1, y1, x2, y2, x3, y3)
