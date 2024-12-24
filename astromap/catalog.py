@@ -1,6 +1,6 @@
 from operator import attrgetter
 from pathlib import Path
-from typing import TextIO
+from typing import Iterator, TextIO
 
 from astromap.star import BrightStar, star_from_catalog
 
@@ -27,6 +27,9 @@ class BrightStarCatalog:
 
     def __getitem__(self, i: int) -> BrightStar:
         return self._stars[i]
+
+    def __iter__(self) -> Iterator[BrightStar]:
+        return self._stars.values().__iter__()
 
     def __len__(self) -> int:
         return len(self._stars)
