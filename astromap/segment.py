@@ -58,11 +58,11 @@ class SkySegmenter:
             dtype=float,
         )
 
-        # vectorized calculations of pairwise magnitude
+        # vectorized calculation of pairwise magnitude
         mags = self._magnitudes.reshape(1, self._magnitudes.size)
         self._pairwise_magnitudes = mags + mags.T
 
-        # vectorized calculations of distance
+        # vectorized calculation of distance
         azimuths = self._coords[:, 0].reshape(1, self._coords.shape[0])
         zeniths = self._coords[:, 1].reshape(1, self._coords.shape[0])
 
@@ -78,7 +78,14 @@ class SkySegmenter:
             pairwise_zn_sin + (pairwise_zn_cos * pairwise_az_diff_cos)
         )
 
-        # 
+        # vectorized calculation of brightness
+        self._brights = np.add(
+            np.power(self._pairwise_magnitudes, self._magnitude_power),
+            np.multiply(
+                np.power(self._distances, self._distance_power),
+                self._distance_coefficient,
+            ),
+        )
 
         return edges
 
