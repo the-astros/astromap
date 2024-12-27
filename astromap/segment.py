@@ -4,7 +4,7 @@ implements constellation segmentation algorithm
 edge_brightness = (((a.magnitude + b.magnitude) ** magnitude_power)
 + ((distance(a, b) ** distance_power) ** distance_coefficient))
 
-edge_priority = 
+edge_priority = edge_brightness + (rival_coefficient / rival_brightness)
 
 To find the distance between two polar coordinates on a unit sphere,
 use the formula:
@@ -17,11 +17,58 @@ calculates the angle between the two points on the sphere, which is the
 shortest distance between them on the unit sphere surface.
 """
 
+from dataclasses import dataclass
 from operator import attrgetter
+from typing import Self
 import numpy as np
 
 from astromap.star import BrightStar
 from astromap.catalog import BrightStarCatalog
+
+
+@dataclass
+class BrightEdge:
+    index: tuple[int, int]  # indices of this edge into ndarray
+    stars: tuple[int, int]  # catalog numbers of vertex stars
+    brightness: float  # brightness metric
+    now_bright: float  # brightness + rival_brightness
+    rival: tuple[int, int] | None = None
+    rival_brightness: float | None = None
+
+    def __lt__(self, other: object) -> bool:
+        if other is None:
+            return True
+        if isinstance(other, self.__class__):
+            return self.now_bright < other.now_bright
+        return NotImplemented
+
+    def __le__(self, other: object) -> bool:
+        if other is None:
+            return True
+        if isinstance(other, self.__class__):
+            return self.now_bright <= other.now_bright
+        return NotImplemented
+
+    def __gt__(self, other: object) -> bool:
+        if other is None:
+            return False
+        if isinstance(other, self.__class__):
+            return self.now_bright > other.now_bright
+        return NotImplemented
+
+    def __ge__(self, other: object) -> bool:
+        if other is None:
+            return False
+        if isinstance(other, self.__class__):
+            return self.now_bright >= other.now_bright
+        return NotImplemented
+
+    def __eq__(self, other: object) -> bool:
+        if other is None:
+            return False
+        if isinstance(other, self.__class__):
+            return self.now_bright == other.now_bright
+        return NotImplemented
 
 
 class SkySegmenter:
@@ -32,16 +79,9 @@ class SkySegmenter:
         self._distance_power: np.float64 = np.float64(2.0)
         self._distance_coefficient: np.float64 = np.float64(16.0)
 
-        self._numbers: list[int] | None = None
-        self._magnitudes: np.ndarray | None = None
-        self._coords: np.ndarray | None = None
-        self._pairwise_magnitudes: np.ndarray | None = None
-        self._distances: np.ndarray | None = None
-        self._brights: np.ndarray | None = None
+        self._edges: np.ndarray | None = None
 
-    def segment(self, max_magnitude: float = 2.0) -> list[tuple[int, int]]:
-        edges: list[tuple[int, int]] = []
-
+    def _gen_edges(self, max_magnitude: float = 2.0) -> None:
         # get list of stars below given magnitude & sorted by magnitude
         stars = sorted(
             [star for star in self._catalog if star.magnitude <= max_magnitude],
@@ -49,22 +89,22 @@ class SkySegmenter:
         )
 
         # break up star attributes into a list of star #s & two numpy arrays
-        self._numbers = [star.number for star in stars]
-        self._magnitudes = np.array(
+        numbers: list[int] = [star.number for star in stars]
+        magnitudes = np.array(
             [star.magnitude + 1.5 for star in stars], dtype=float
         )
-        self._coords = np.array(
+        coords = np.array(
             [[star.coords.azimuth, star.coords.zenith] for star in stars],
             dtype=float,
         )
 
         # vectorized calculation of pairwise magnitude
-        mags = self._magnitudes.reshape(1, self._magnitudes.size)
-        self._pairwise_magnitudes = mags + mags.T
+        mags = magnitudes.reshape(1, magnitudes.size)
+        pairwise_magnitudes = mags + mags.T
 
         # vectorized calculation of distance
-        azimuths = self._coords[:, 0].reshape(1, self._coords.shape[0])
-        zeniths = self._coords[:, 1].reshape(1, self._coords.shape[0])
+        azimuths = coords[:, 0].reshape(1, len(stars))
+        zeniths = coords[:, 1].reshape(1, len(stars))
 
         zn_sin = np.sin(zeniths)
         pairwise_zn_sin = zn_sin * zn_sin.T
@@ -74,20 +114,33 @@ class SkySegmenter:
 
         pairwise_az_diff_cos = np.cos(azimuths - azimuths.T)
 
-        self._distances = np.arccos(
-            pairwise_zn_sin + (pairwise_zn_cos * pairwise_az_diff_cos)
+        distances = np.arccos(
+            np.minimum(1.0, pairwise_zn_sin + (pairwise_zn_cos * pairwise_az_diff_cos))
         )
 
         # vectorized calculation of brightness
-        self._brights = np.add(
-            np.power(self._pairwise_magnitudes, self._magnitude_power),
+        brights = np.add(
+            np.power(pairwise_magnitudes, self._magnitude_power),
             np.multiply(
-                np.power(self._distances, self._distance_power),
+                np.power(distances, self._distance_power),
                 self._distance_coefficient,
             ),
         )
 
-        return edges
+        self._edges = np.array(
+            [
+                BrightEdge(
+                    index=(u, v),
+                    stars=(numbers[u], numbers[v]),
+                    brightness=brights[u, v],
+                    now_bright=brights[u, v],
+                )
+                if u < v
+                else None
+                for u in range(len(stars))
+                for v in range(len(stars))
+            ]
+        ).reshape(len(stars), len(stars))
 
     @staticmethod
     def distance(
