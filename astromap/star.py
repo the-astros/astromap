@@ -51,3 +51,19 @@ class BrightStar:
     equatorial: EquatorialCoordinates
     proper: ProperMotion
     spectral: str | None  # spectral type
+
+
+@dataclass
+class BrightEdge:
+    stars: tuple[int, int]  # catalog numbers of vertex stars
+    prominence: float  # metric combining brightness & distance of vertices
+    shadow: float  # prominence adjusted for rival edges
+    draft: int | None = None  # order drafted
+    group: int | None = None  # number of group drafted into
+
+
+@dataclass
+class BrightGroup:
+    number: int  # unique number for each star group
+    stars: frozenset[int]  # catalog numbers of member stars
+    edges: frozenset[tuple[int, int]]  # catalog star pairs of member edges

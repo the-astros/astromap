@@ -2,14 +2,32 @@ import math
 
 import cairo
 
-from astromap.star import BrightStar
+from astromap.star import BrightStar, BrightEdge, BrightGroup
 
 
-class StarMap:
+class BrightStarMap:
     def __init__(
-        self, stars: list[BrightStar], size: int = 9, pad: int = 16
+        self,
+        stars: list[BrightStar],
+        edges: list[BrightEdge],
+        groups: list[BrightGroup],
+        size: int = 9,
+        pad: int = 16,
     ) -> None:
-        self._stars: list[BrightStar] = list(stars)
+        # index stars by catalog number
+        self._stars: dict[int, BrightStar] = {}
+        for star in stars:
+            self._stars[star.number] = star
+
+        # index edges by vertex star number tuple
+        self._edges: dict[tuple[int, int], BrightEdge] = {}
+        for edge in edges:
+            self._edges[edge.stars] = edge
+
+        # index constellations by group number
+        self._groups: dict[int, BrightGroup] = {}
+        for group in groups:
+            self._groups[group.number] = group
 
         # size of rendered image in pixels
         self._map_px_size: int = 2**size
@@ -30,6 +48,13 @@ class StarMap:
             0.2,
             1.0,
         )
+        self._edge_color: tuple[float, float, float, float] = (
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+        )
+        self._edge_stroke: float = 0.005
         self._star_color: tuple[float, float, float, float] = (
             1.0,
             1.0,
@@ -44,14 +69,27 @@ class StarMap:
         context.scale(self._map_scale, self._map_scale)
 
         # draw field
+        context.save()
         context.set_source_rgba(*self._field_color)
         context.rectangle(0, 0, math.pi * 2, math.pi)
         context.fill()
+        context.restore()
+
+        for edge in self._edges.values():
+            context.save()
+            star_a: BrightStar = self._stars[edge.stars[0]]
+            star_b: BrightStar = self._stars[edge.stars[1]]
+            self.render_edge(
+                context,
+                ((math.pi * 2) - star_a.coords.azimuth, star_a.coords.zenith),
+                ((math.pi * 2) - star_b.coords.azimuth, star_b.coords.zenith),
+                edge.prominence,
+            )
+            context.restore()
 
         context.set_source_rgba(*self._star_color)
         context.set_line_width(self._star_stroke)
-
-        for star in self._stars:
+        for star in self._stars.values():
             # push context & translate to center of star
             context.save()
             context.translate(
@@ -63,7 +101,27 @@ class StarMap:
             # pop context
             context.restore()
 
-    def render_star(self, context: cairo.Context, magnitude: float):
+    def render_edge(
+        self,
+        context: cairo.Context,
+        a: tuple[float, float],
+        b: tuple[float, float],
+        prominence: float,
+    ) -> None:
+        color: tuple[float, float, float, float] = (
+            self._edge_color[0],
+            self._edge_color[1],
+            self._edge_color[2] * ((prominence ** -2.0) * 100.0),
+            self._edge_color[3],
+        )
+        context.set_source_rgba(*color)
+        context.set_line_width(self._edge_stroke)
+
+        context.move_to(*a)
+        context.line_to(*b)
+        context.stroke()
+
+    def render_star(self, context: cairo.Context, magnitude: float) -> None:
         radius: float = (
             max(1, (self._star_base - magnitude) ** 1.3)
         ) * self._star_k

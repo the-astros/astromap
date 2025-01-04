@@ -23,12 +23,12 @@ from os import sep
 from typing import Self
 import numpy as np
 
-from astromap.star import BrightStar
+from astromap.star import BrightStar, BrightEdge, BrightGroup
 from astromap.catalog import BrightStarCatalog
 
 
 @dataclass
-class BrightEdge:
+class SegmenterEdge:
     index: tuple[int, int]  # indices of this edge into ndarray
     stars: tuple[int, int]  # catalog numbers of vertex stars
     brightness: float  # brightness metric
@@ -93,15 +93,46 @@ class SkySegmenter:
     def __init__(self, catalog: BrightStarCatalog) -> None:
         self._catalog: BrightStarCatalog = catalog
 
-        self._magnitude_power: np.float64 = np.float64(2.0)
+        self._magnitude_power: np.float64 = np.float64(1.0)
         self._distance_power: np.float64 = np.float64(2.0)
-        self._distance_coefficient: np.float64 = np.float64(64.0)
+        self._distance_coefficient: np.float64 = np.float64(512.0)
         self._rival_coefficient: np.float64 = np.float64(16.0)
 
         self._numbers: list[int] = []  # catalog number by index into edges
         self._edges: np.ndarray | None = None
         self._groups: list[set[tuple[int, int]]] = []
         self._members: dict[int, int] = {}  # star_index: group_index
+
+    def get_stars(
+        self,
+    ) -> tuple[list[BrightStar], list[BrightEdge], list[BrightGroup]]:
+        if self._edges is None:
+            raise RuntimeError("no edges :(")
+        stars = [self._catalog[n] for n in self._numbers]
+
+        edges: list[BrightEdge] = []
+        groups: list[BrightGroup] = []
+        for i, pair_set in enumerate(self._groups):
+            group_stars: set[int] = set()
+            group_edges: set[tuple[int, int]] = set()
+            for pair in pair_set:
+                seg_edge = self._edges[pair]
+                edge = BrightEdge(
+                    stars=seg_edge.stars,
+                    prominence=seg_edge.brightness,
+                    shadow=seg_edge.now_bright,
+                )
+                edges.append(edge)
+                group_stars |= set(edge.stars)
+                group_edges.add(edge.stars)
+            group = BrightGroup(
+                number=i,
+                stars=frozenset(group_stars),
+                edges=frozenset(group_edges),
+            )
+            groups.append(group)
+
+        return stars, edges, groups
 
     def segment(self, max_magnitude: float = 2.0) -> None:
         numbers, edges = self._gen_edges(max_magnitude=max_magnitude)
@@ -124,16 +155,14 @@ class SkySegmenter:
             )
             assert len(brightest) == 2
 
-            edge: BrightEdge = self._edges[brightest]
+            edge: SegmenterEdge = self._edges[brightest]
 
             group_index: int | None = None
             separate_groups: bool = False
             group: set[tuple[int, int]] = set()
             for i in brightest:
-
                 # check if either star is already in a group
                 if i in self._members:
-
                     # if both vertices of edge are already in separate groups
                     # dont add this edge to either
                     if group_index is not None:
@@ -144,7 +173,6 @@ class SkySegmenter:
 
             edge.now_bright = None
             if not separate_groups:
-
                 if group_index is None:
                     group_index = len(self._groups)
                     self._groups.append(group)
@@ -154,14 +182,12 @@ class SkySegmenter:
                 group.add(brightest)
                 edge.group = group_index
 
-                # remove stars from lonely stars set 
+                # remove stars from lonely stars set
                 # & add group to members index
                 for i in brightest:
-
                     # remove both vertices from lonely stars set
                     lonely_stars.discard(i)
                     self._members[i] = group_index
-
 
     def _gen_edges(
         self, max_magnitude: float = 2.0
@@ -216,11 +242,11 @@ class SkySegmenter:
 
         edges = np.array(
             [
-                BrightEdge(
+                SegmenterEdge(
                     index=(u, v),
                     stars=(numbers[u], numbers[v]),
-                    brightness=brights[u, v],
-                    now_bright=brights[u, v],
+                    brightness=distances[u, v],
+                    now_bright=distances[u, v],
                 )
                 if u < v
                 else None
