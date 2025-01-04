@@ -10,4 +10,4 @@ table = open(vendor_dir_path)
 catalog = BrightStarCatalog(table)
 
 segmenter = SkySegmenter(catalog)
-segmenter._gen_edges()
+segmenter.segment()

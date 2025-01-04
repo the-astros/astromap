@@ -19,6 +19,7 @@ shortest distance between them on the unit sphere surface.
 
 from dataclasses import dataclass
 from operator import attrgetter
+from os import sep
 from typing import Self
 import numpy as np
 
@@ -31,14 +32,19 @@ class BrightEdge:
     index: tuple[int, int]  # indices of this edge into ndarray
     stars: tuple[int, int]  # catalog numbers of vertex stars
     brightness: float  # brightness metric
-    now_bright: float  # brightness + rival_brightness
+    now_bright: float | None  # brightness + rival_brightness
     rival: tuple[int, int] | None = None
     rival_brightness: float | None = None
+    group: int | None = None  # which group this edge belongs to
 
     def __lt__(self, other: object) -> bool:
         if other is None:
             return True
         if isinstance(other, self.__class__):
+            if self.now_bright is None:
+                return False
+            if other.now_bright is None:
+                return True
             return self.now_bright < other.now_bright
         return NotImplemented
 
@@ -46,6 +52,10 @@ class BrightEdge:
         if other is None:
             return True
         if isinstance(other, self.__class__):
+            if other.now_bright is None:
+                return True
+            if self.now_bright is None:
+                return False
             return self.now_bright <= other.now_bright
         return NotImplemented
 
@@ -53,6 +63,10 @@ class BrightEdge:
         if other is None:
             return False
         if isinstance(other, self.__class__):
+            if other.now_bright is None:
+                return False
+            if self.now_bright is None:
+                return True
             return self.now_bright > other.now_bright
         return NotImplemented
 
@@ -60,6 +74,10 @@ class BrightEdge:
         if other is None:
             return False
         if isinstance(other, self.__class__):
+            if self.now_bright is None:
+                return True
+            if other.now_bright is None:
+                return False
             return self.now_bright >= other.now_bright
         return NotImplemented
 
@@ -78,15 +96,82 @@ class SkySegmenter:
         self._magnitude_power: np.float64 = np.float64(2.0)
         self._distance_power: np.float64 = np.float64(2.0)
         self._distance_coefficient: np.float64 = np.float64(16.0)
+        self._rival_coefficient: np.float64 = np.float64(16.0)
 
+        self._numbers: list[int] = []  # catalog number by index into edges
         self._edges: np.ndarray | None = None
+        self._groups: list[set[tuple[int, int]]] = []
+        self._members: dict[int, int] = {}  # star_index: group_index
 
-    def _gen_edges(self, max_magnitude: float = 2.0) -> None:
+    def segment(self, max_magnitude: float = 2.0) -> None:
+        numbers, edges = self._gen_edges(max_magnitude=max_magnitude)
+
+        count: int = len(numbers)
+
+        self._numbers = numbers
+        self._edges = edges
+        self._groups = []
+        self._members = {}
+
+        lonely_stars: set[int] = set([i for i in range(count)])
+
+        while len(lonely_stars) > 0:
+            brightest: tuple[int, ...] = tuple(
+                [
+                    int(i)
+                    for i in np.unravel_index(np.argmin(edges), edges.shape)
+                ]
+            )
+            assert len(brightest) == 2
+
+            edge: BrightEdge = self._edges[brightest]
+
+            group_index: int | None = None
+            separate_groups: bool = False
+            group: set[tuple[int, int]] = set()
+            for i in brightest:
+
+                # check if either star is already in a group
+                if i in self._members:
+
+                    # if both vertices of edge are already in separate groups
+                    # dont add this edge to either
+                    if group_index is not None:
+                        if group_index != self._members[i]:
+                            separate_groups = True
+
+                    group_index = self._members[i]
+
+            edge.now_bright = None
+            if not separate_groups:
+
+                if group_index is None:
+                    group_index = len(self._groups)
+                    self._groups.append(group)
+                else:
+                    group = self._groups[group_index]
+
+                group.add(brightest)
+                edge.group = group_index
+
+                # remove stars from lonely stars set 
+                # & add group to members index
+                for i in brightest:
+
+                    # remove both vertices from lonely stars set
+                    lonely_stars.discard(i)
+                    self._members[i] = group_index
+
+
+    def _gen_edges(
+        self, max_magnitude: float = 2.0
+    ) -> tuple[list[int], np.ndarray]:
         # get list of stars below given magnitude & sorted by magnitude
         stars = sorted(
             [star for star in self._catalog if star.magnitude <= max_magnitude],
             key=attrgetter("magnitude"),
         )
+        count = len(stars)
 
         # break up star attributes into a list of star #s & two numpy arrays
         numbers: list[int] = [star.number for star in stars]
@@ -103,8 +188,8 @@ class SkySegmenter:
         pairwise_magnitudes = mags + mags.T
 
         # vectorized calculation of distance
-        azimuths = coords[:, 0].reshape(1, len(stars))
-        zeniths = coords[:, 1].reshape(1, len(stars))
+        azimuths = coords[:, 0].reshape(1, count)
+        zeniths = coords[:, 1].reshape(1, count)
 
         zn_sin = np.sin(zeniths)
         pairwise_zn_sin = zn_sin * zn_sin.T
@@ -115,7 +200,9 @@ class SkySegmenter:
         pairwise_az_diff_cos = np.cos(azimuths - azimuths.T)
 
         distances = np.arccos(
-            np.minimum(1.0, pairwise_zn_sin + (pairwise_zn_cos * pairwise_az_diff_cos))
+            np.minimum(
+                1.0, pairwise_zn_sin + (pairwise_zn_cos * pairwise_az_diff_cos)
+            )
         )
 
         # vectorized calculation of brightness
@@ -127,7 +214,7 @@ class SkySegmenter:
             ),
         )
 
-        self._edges = np.array(
+        edges = np.array(
             [
                 BrightEdge(
                     index=(u, v),
@@ -137,10 +224,12 @@ class SkySegmenter:
                 )
                 if u < v
                 else None
-                for u in range(len(stars))
-                for v in range(len(stars))
+                for u in range(count)
+                for v in range(count)
             ]
-        ).reshape(len(stars), len(stars))
+        ).reshape(count, count)
+
+        return numbers, edges
 
     @staticmethod
     def distance(
