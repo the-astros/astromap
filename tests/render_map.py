@@ -19,6 +19,8 @@ image_path = str((image_build_path / "map.png").resolve())
 
 stars = [catalog.bright(i) for i in range(500)]
 
+# edges: list[tuple[int, int]] = []
+
 starmap = StarMap(stars, size=10)
 starmap.render_png(image_path)
 

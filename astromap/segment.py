@@ -95,7 +95,7 @@ class SkySegmenter:
 
         self._magnitude_power: np.float64 = np.float64(2.0)
         self._distance_power: np.float64 = np.float64(2.0)
-        self._distance_coefficient: np.float64 = np.float64(16.0)
+        self._distance_coefficient: np.float64 = np.float64(64.0)
         self._rival_coefficient: np.float64 = np.float64(16.0)
 
         self._numbers: list[int] = []  # catalog number by index into edges

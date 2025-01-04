@@ -10,4 +10,4 @@ table = open(vendor_dir_path)
 catalog = BrightStarCatalog(table)
 
 segmenter = SkySegmenter(catalog)
-segmenter.segment()
+segmenter.segment(max_magnitude=3.0)
