@@ -1,14 +1,30 @@
+from dataclasses import dataclass
 from operator import attrgetter
 from typing import Iterator, TextIO
+from enum import StrEnum
 import math
 
-from astromap.star import (
-    BrightStar,
-    DeclinationSign,
-    EquatorialCoordinates,
-    PolarCoordinates,
-    ProperMotion,
-)
+from astromap.star import BrightStar, CelestialCoordinates, CelestialMotion
+
+
+class DeclinationSign(StrEnum):
+    NEGATIVE = "-"
+    POSITIVE = "+"
+
+
+@dataclass
+class EquatorialCoordinates:
+    # hours, minutes, seconds
+    right_ascension: tuple[float, float, float]
+
+    # sign, degrees, arcminutes, arcseconds
+    declination: tuple[DeclinationSign, float, float, float]
+
+
+@dataclass
+class ProperMotion:
+    right_ascension: float
+    declination: float
 
 
 class BrightStarCatalog:
@@ -64,16 +80,16 @@ class BrightStarCatalog:
         return self._stars[self._magnitudes[n][1]]
 
     @staticmethod
-    def polar_from_equatorial(
+    def celestial_from_equatorial(
         eq_coords: EquatorialCoordinates,
-    ) -> PolarCoordinates:
+    ) -> CelestialCoordinates:
         """
         convert equatorial coordinates to polar coordinates
         """
         # converts hours, minutes, seconds to degrees and then to radians
         # 1 hour = 15 degrees
         # 1 second = 15 / 3600 degrees
-        azimuth: float = math.radians(
+        right_ascension: float = math.radians(
             (
                 (eq_coords.right_ascension[0] * 3600)  # hours to seconds
                 + (eq_coords.right_ascension[1] * 60)  # minutes to seconds
@@ -83,33 +99,31 @@ class BrightStarCatalog:
         )
 
         # convert degrees, minutes, seconds to digital degrees and then to radians
-        zenith: float = math.radians(
+        declination: float = math.radians(
             eq_coords.declination[1]  # already degrees
             + (eq_coords.declination[2] / 60)  # minutes to degrees
             + (eq_coords.declination[3] / 3600)  # seconds to degrees
         )
 
-        # convert offset from equator to north pole
+        # take sign into account
         if eq_coords.declination[0] is DeclinationSign.NEGATIVE:
-            zenith += (
-                math.pi * 0.5
-            )  # negative declination is offset from pi / 2
-        else:
-            zenith = (
-                math.pi * 0.5
-            ) - zenith  # subtract +declination from pi / 2
+            declination = -declination
 
-        return PolarCoordinates(azimuth=azimuth, zenith=zenith)
+        return CelestialCoordinates(
+            right_ascension=right_ascension, declination=declination
+        )
 
     @staticmethod
-    def polar_from_proper(proper: ProperMotion) -> PolarCoordinates:
+    def celestial_from_proper(proper: ProperMotion) -> CelestialMotion:
         """
         convert proper motion to polar coordinates
         """
-        azimuth: float = math.radians(proper.right_ascension / 3600)
-        zenith: float = math.radians(proper.declination / -3600)
+        right_ascension: float = math.radians(proper.right_ascension / 3600)
+        declination: float = math.radians(proper.declination / 3600)
 
-        return PolarCoordinates(azimuth=azimuth, zenith=zenith)
+        return CelestialMotion(
+            right_ascension=right_ascension, declination=declination
+        )
 
     def star_from_catalog(self, row: str) -> BrightStar | None:
         """parse star data from row of bright star catalog"""
@@ -157,9 +171,7 @@ class BrightStarCatalog:
             number=number,
             name=name,
             magnitude=magnitude,
-            coords=self.polar_from_equatorial(equatorial),
-            motion=self.polar_from_proper(proper),
-            equatorial=equatorial,
-            proper=proper,
+            coords=self.celestial_from_equatorial(equatorial),
+            motion=self.celestial_from_proper(proper),
             spectral=spectral,
         )

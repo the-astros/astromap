@@ -1,38 +1,78 @@
+from collections.abc import Iterator
 from dataclasses import dataclass
-from enum import StrEnum
-
-
-class DeclinationSign(StrEnum):
-    NEGATIVE = "-"
-    POSITIVE = "+"
+import math
 
 
 @dataclass
-class EquatorialCoordinates:
-    # hours, minutes, seconds
-    right_ascension: tuple[float, float, float]
-
-    # sign, degrees, arcminutes, arcseconds
-    declination: tuple[DeclinationSign, float, float, float]
-
-
-@dataclass
-class PolarCoordinates:
+class CelestialCoordinates:
     """
     equatorial coordinates expressed in radians
 
-    - azimuth is radians in range [0 - 2pi)
-    - zenith is in range [0 - pi] offset from the positive z axis
+    - right ascension is radians in range [0 - 2pi)
+    - declination is in range [-pi/2 - pi/2]
     """
 
-    azimuth: float
-    zenith: float
-
-
-@dataclass
-class ProperMotion:
     right_ascension: float
     declination: float
+
+    def __getitem__(self, index: int) -> float:
+        if index == 0:
+            return self.right_ascension
+        if index == 1:
+            return self.declination
+        raise IndexError(f"index '{index}' out of range [0 - 1]")
+
+    def __iter__(self) -> Iterator[float]:
+        yield self.right_ascension
+        yield self.declination
+
+    def __post_init__(self) -> None:
+        """validate that celestial coordinates are within range of sphere"""
+
+        if self.right_ascension < 0 or 2 * math.pi <= self.right_ascension:
+            raise ValueError(
+                f"right ascension '{self.right_ascension}'"
+                " not in range [0 - 2 * pi)"
+            )
+        if self.declination < -math.pi / 2 or math.pi / 2 < self.declination:
+            raise ValueError(
+                f"declination '{self.declination}'"
+                " not in range [-pi / 2 - pi / 2]"
+            )
+
+
+def celestial_distance(a: CelestialCoordinates, b: CelestialCoordinates):
+    right_ascension_delta = min(
+        abs(a.right_ascension - b.right_ascension),
+        2 * math.pi - abs(a.right_ascension - b.right_ascension),
+    )
+    return math.acos(
+        (math.sin(a.declination) * math.sin(b.declination))
+        + (
+            math.cos(a.declination)
+            * math.cos(b.declination)
+            * math.cos(right_ascension_delta)
+        )
+    )
+
+@dataclass
+class CelestialMotion:
+    """
+    proper motion expressed in radians
+    """
+    right_ascension: float
+    declination: float
+
+    def __getitem__(self, index: int) -> float:
+        if index == 0:
+            return self.right_ascension
+        if index == 1:
+            return self.declination
+        raise IndexError(f"index '{index}' out of range [0 - 1]")
+
+    def __iter__(self) -> Iterator[float]:
+        yield self.right_ascension
+        yield self.declination
 
 
 @dataclass
@@ -46,10 +86,8 @@ class BrightStar:
     number: int  # bright star catalog number
     name: str | None
     magnitude: float  # apparent visual magnitude
-    coords: PolarCoordinates
-    motion: PolarCoordinates  # proper motion / year expressed in polar coords
-    equatorial: EquatorialCoordinates
-    proper: ProperMotion
+    coords: CelestialCoordinates
+    motion: CelestialMotion  # proper motion / year
     spectral: str | None  # spectral type
 
 
