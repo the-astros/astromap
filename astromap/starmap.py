@@ -81,8 +81,8 @@ class BrightStarMap:
             star_b: BrightStar = self._stars[edge.stars[1]]
             self.render_edge(
                 context,
-                ((math.pi * 2) - star_a.coords.azimuth, star_a.coords.zenith),
-                ((math.pi * 2) - star_b.coords.azimuth, star_b.coords.zenith),
+                self.coords_from_star(star_a),
+                self.coords_from_star(star_b),
                 edge.prominence,
             )
             context.restore()
@@ -92,14 +92,19 @@ class BrightStarMap:
         for star in self._stars.values():
             # push context & translate to center of star
             context.save()
-            context.translate(
-                (math.pi * 2) - star.coords.azimuth, star.coords.zenith
-            )
+            context.translate(*self.coords_from_star(star))
 
             self.render_star(context, star.magnitude)
 
             # pop context
             context.restore()
+
+    @staticmethod
+    def coords_from_star(star: BrightStar) -> tuple[float, float]:
+        return (
+            (math.pi * 2) - star.coords.right_ascension,
+            (math.pi / 2) - star.coords.declination,
+        )
 
     def render_edge(
         self,
@@ -111,14 +116,32 @@ class BrightStarMap:
         color: tuple[float, float, float, float] = (
             self._edge_color[0],
             self._edge_color[1],
-            self._edge_color[2] * ((prominence ** -2.0) * 100.0),
+            self._edge_color[2] * ((prominence**-2.0) * 100.0),
             self._edge_color[3],
         )
         context.set_source_rgba(*color)
         context.set_line_width(self._edge_stroke)
 
-        context.move_to(*a)
-        context.line_to(*b)
+        if (abs(a[0] - b[0]) <= math.pi):
+            context.move_to(*a)
+            context.line_to(*b)
+            context.stroke()
+            return
+
+        # render edge that wraps around map
+        c = a
+        d = b
+        if a[0] > b[0]:
+            c = b
+            d = a
+        e = d[0] - 2 * math.pi, d[1]
+        f = c[0] + 2 * math.pi, c[1]
+
+        context.move_to(*c)
+        context.line_to(*e)
+        context.stroke()
+        context.move_to(*d)
+        context.line_to(*f)
         context.stroke()
 
     def render_star(self, context: cairo.Context, magnitude: float) -> None:

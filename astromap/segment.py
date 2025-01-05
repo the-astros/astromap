@@ -93,9 +93,9 @@ class SkySegmenter:
     def __init__(self, catalog: BrightStarCatalog) -> None:
         self._catalog: BrightStarCatalog = catalog
 
-        self._magnitude_power: np.float64 = np.float64(1.0)
+        self._magnitude_power: np.float64 = np.float64(2.0)
         self._distance_power: np.float64 = np.float64(2.0)
-        self._distance_coefficient: np.float64 = np.float64(512.0)
+        self._distance_coefficient: np.float64 = np.float64(64.0)
         self._rival_coefficient: np.float64 = np.float64(16.0)
 
         self._numbers: list[int] = []  # catalog number by index into edges
@@ -205,7 +205,10 @@ class SkySegmenter:
             [star.magnitude + 1.5 for star in stars], dtype=float
         )
         coords = np.array(
-            [[star.coords.azimuth, star.coords.zenith] for star in stars],
+            [
+                [star.coords.right_ascension, star.coords.declination]
+                for star in stars
+            ],
             dtype=float,
         )
 
@@ -214,20 +217,24 @@ class SkySegmenter:
         pairwise_magnitudes = mags + mags.T
 
         # vectorized calculation of distance
-        azimuths = coords[:, 0].reshape(1, count)
-        zeniths = coords[:, 1].reshape(1, count)
+        ras = coords[:, 0].reshape(1, count)
+        declinations = coords[:, 1].reshape(1, count)
 
-        zn_sin = np.sin(zeniths)
-        pairwise_zn_sin = zn_sin * zn_sin.T
+        dec_sin = np.sin(declinations)
+        pairwise_dec_sin = dec_sin * dec_sin.T
 
-        zn_cos = np.cos(zeniths)
-        pairwise_zn_cos = zn_cos * zn_cos.T
+        dec_cos = np.cos(declinations)
+        pairwise_dec_cos = dec_cos * dec_cos.T
+        ras_delta = np.abs(ras - ras.T)
 
-        pairwise_az_diff_cos = np.cos(azimuths - azimuths.T)
+        pairwise_ra_diff_cos = np.cos(
+            np.minimum(ras_delta, (2 * np.pi) - ras_delta)
+        )
 
         distances = np.arccos(
             np.minimum(
-                1.0, pairwise_zn_sin + (pairwise_zn_cos * pairwise_az_diff_cos)
+                1.0,
+                pairwise_dec_sin + (pairwise_dec_cos * pairwise_ra_diff_cos),
             )
         )
 
