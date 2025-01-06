@@ -1,5 +1,5 @@
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 
 
@@ -96,7 +96,7 @@ class BrightEdge:
     stars: tuple[int, int]  # catalog numbers of vertex stars
     prominence: float  # metric combining brightness & distance of vertices
     shadow: float  # prominence adjusted for rival edges
-    draft: int | None = None  # order drafted
+    draft: int  # order drafted
     group: int | None = None  # number of group drafted into
 
 
@@ -105,3 +105,27 @@ class BrightGroup:
     number: int  # unique number for each star group
     stars: frozenset[int]  # catalog numbers of member stars
     edges: frozenset[tuple[int, int]]  # catalog star pairs of member edges
+
+
+@dataclass
+class BrightDraft:
+    pick: int
+    edge: tuple[int, int]  # index by vertex catalog number
+    group: int | None
+    prominence: float
+    shadow: float
+
+
+@dataclass
+class BrightSky:
+    # index of stars by catalog number
+    stars: dict[int, BrightStar] = field(default_factory=dict)
+
+    # edges by vertex catalog number
+    edges: dict[tuple[int, int], BrightEdge] = field(default_factory=dict)
+
+    # groups by draft number
+    groups: dict[int, BrightGroup] = field(default_factory=dict)
+
+    # record of edge drafts
+    drafts: list[BrightDraft] = field(default_factory=list)

@@ -20,265 +20,249 @@ shortest distance between them on the unit sphere surface.
 from dataclasses import dataclass
 from operator import attrgetter
 from os import sep
+from sys import displayhook
 from typing import Self
 import numpy as np
 
-from astromap.star import BrightStar, BrightEdge, BrightGroup
+from astromap.star import (
+    BrightStar,
+    BrightEdge,
+    BrightGroup,
+    BrightDraft,
+    BrightSky,
+)
 from astromap.catalog import BrightStarCatalog
 
 
-@dataclass
-class SegmenterEdge:
-    index: tuple[int, int]  # indices of this edge into ndarray
-    stars: tuple[int, int]  # catalog numbers of vertex stars
-    brightness: float  # brightness metric
-    now_bright: float | None  # brightness + rival_brightness
-    rival: tuple[int, int] | None = None
-    rival_brightness: float | None = None
-    group: int | None = None  # which group this edge belongs to
+def segment(
+    stars: list[BrightStar],
+    magnitude_power: float = 1.0,
+    distance_power: float = 2.0,
+    distance_coefficient: float = 512.0,
+    rival_coefficient: float = 16.0,
+) -> BrightSky:
+    """segment stars into groups by brightness & distance"""
+    sky: BrightSky = BrightSky()
 
-    def __lt__(self, other: object) -> bool:
-        if other is None:
-            return True
-        if isinstance(other, self.__class__):
-            if self.now_bright is None:
-                return False
-            if other.now_bright is None:
-                return True
-            return self.now_bright < other.now_bright
-        return NotImplemented
+    # add stars to sky by catalog number
+    for star in stars:
+        sky.stars[star.number] = star
 
-    def __le__(self, other: object) -> bool:
-        if other is None:
-            return True
-        if isinstance(other, self.__class__):
-            if other.now_bright is None:
-                return True
-            if self.now_bright is None:
-                return False
-            return self.now_bright <= other.now_bright
-        return NotImplemented
+    # get list of stars ordered from lowest to highest magnitude
+    # - lower magnitude is brighter
+    sorted_stars: list[BrightStar] = sorted(stars, key=attrgetter("magnitude"))
 
-    def __gt__(self, other: object) -> bool:
-        if other is None:
-            return False
-        if isinstance(other, self.__class__):
-            if other.now_bright is None:
-                return False
-            if self.now_bright is None:
-                return True
-            return self.now_bright > other.now_bright
-        return NotImplemented
+    # print("sorted stars:")
+    # for i, star in enumerate(sorted_stars):
+    #     print(f"{i}: {star}")
 
-    def __ge__(self, other: object) -> bool:
-        if other is None:
-            return False
-        if isinstance(other, self.__class__):
-            if self.now_bright is None:
-                return True
-            if other.now_bright is None:
-                return False
-            return self.now_bright >= other.now_bright
-        return NotImplemented
+    # get matrix of edge prominences (where lowest value is most prominent)
+    prominences: np.ndarray = _get_prominence_matrix(
+        sorted_stars,
+        magnitude_power=magnitude_power,
+        distance_power=distance_power,
+        distance_coefficient=distance_coefficient,
+    )
 
-    def __eq__(self, other: object) -> bool:
-        if other is None:
-            return False
-        if isinstance(other, self.__class__):
-            return self.now_bright == other.now_bright
-        return NotImplemented
+    # initialize matrix of rival prominences for each edge to calculate shadows
+    # - shadows are only calculated once for each edge where u < v
+    # - all rival edges where u >= v are initialized to infinity
+    # - edges where u < v are initialized to zero
+    rivals: np.ndarray = np.full(prominences.shape, np.inf, dtype=np.float64)
+    for u, v in np.ndindex(prominences.shape):
+        if u < v:
+            rivals[u, v] = 0.0
+    shadows = prominences + rivals
 
+    # print("rivals:")
+    # print(rivals)
 
-class SkySegmenter:
-    def __init__(self, catalog: BrightStarCatalog) -> None:
-        self._catalog: BrightStarCatalog = catalog
+    # print("shadows:")
+    # print(shadows)
 
-        self._magnitude_power: np.float64 = np.float64(2.0)
-        self._distance_power: np.float64 = np.float64(2.0)
-        self._distance_coefficient: np.float64 = np.float64(64.0)
-        self._rival_coefficient: np.float64 = np.float64(16.0)
+    # draft edges by minimum shadow prominence until all stars are drafted
+    lonely_stars: set[int] = set(range(len(sorted_stars)))
+    grouped_stars: dict[int, int] = {}  # sorted index: group number
+    grouped_edges: dict[tuple[int, int], int] = {}  # edge tuple: group number
+    groups: dict[int, set[tuple[int, int]]] = {}
+    next_draft: int = 0
+    next_group: int = 0
+    while len(lonely_stars) > 0 and next_draft < (2**16):
+        # find next minimum shadow prominence in matrix
+        u, v = (
+            int(i) for i in np.unravel_index(np.argmin(shadows), shadows.shape)
+        )
 
-        self._numbers: list[int] = []  # catalog number by index into edges
-        self._edges: np.ndarray | None = None
-        self._groups: list[set[tuple[int, int]]] = []
-        self._members: dict[int, int] = {}  # star_index: group_index
+        catalog_edge: tuple[int, int] = (
+            sorted_stars[u].number,
+            sorted_stars[v].number,
+        )
 
-    def get_stars(
-        self,
-    ) -> tuple[list[BrightStar], list[BrightEdge], list[BrightGroup]]:
-        if self._edges is None:
-            raise RuntimeError("no edges :(")
-        stars = [self._catalog[n] for n in self._numbers]
+        # print(f"draft {next_draft}: ({u}, {v})")
 
-        edges: list[BrightEdge] = []
-        groups: list[BrightGroup] = []
-        for i, pair_set in enumerate(self._groups):
-            group_stars: set[int] = set()
-            group_edges: set[tuple[int, int]] = set()
-            for pair in pair_set:
-                seg_edge = self._edges[pair]
-                edge = BrightEdge(
-                    stars=seg_edge.stars,
-                    prominence=seg_edge.brightness,
-                    shadow=seg_edge.now_bright,
-                )
-                edges.append(edge)
-                group_stars |= set(edge.stars)
-                group_edges.add(edge.stars)
-            group = BrightGroup(
-                number=i,
-                stars=frozenset(group_stars),
-                edges=frozenset(group_edges),
+        # remove stars from lonely stars set
+        lonely_stars.discard(u)
+        lonely_stars.discard(v)
+
+        # determine group for new edge from groups of stars in pair
+        # - if both stars are grouped merge groups to min group
+        # - if one star is grouped add to existing group
+        # - if neither star is grouped create new group with next group number
+        group_number: int | None = (
+            None if u not in grouped_stars else grouped_stars[u]
+        )
+        if v in grouped_stars:
+            if group_number is None:
+                group_number = grouped_stars[v]
+
+            # if both stars are in different groups merge to minimum
+            if group_number != grouped_stars[v]:
+                merge_group_number: int = max(group_number, grouped_stars[v])
+                group_number = min(group_number, grouped_stars[v])
+
+                merge_group: set[tuple[int, int]] = groups[merge_group_number]
+                groups[group_number] |= groups[merge_group_number]
+                groups.pop(merge_group_number)
+                for p, q in merge_group:
+                    grouped_stars[p] = group_number
+                    grouped_stars[q] = group_number
+                    grouped_edges[p, q] = group_number
+                    merge_catalog_edge: tuple[int, int] = (
+                        sorted_stars[p].number,
+                        sorted_stars[q].number,
+                    )
+                    sky.edges[merge_catalog_edge].group = group_number
+
+        if group_number is None:
+            group_number = next_group
+            next_group += 1
+            groups[group_number] = set()
+
+        # add this edge to stars & groups
+        grouped_stars[u] = group_number
+        grouped_stars[v] = group_number
+        grouped_edges[u, v] = group_number
+        groups[group_number].add((u, v))
+
+        # record draft
+        draft = BrightDraft(
+            pick=next_draft,
+            edge=catalog_edge,
+            group=group_number,
+            prominence=prominences[u, v],
+            shadow=shadows[u, v],
+        )
+        next_draft += 1
+        sky.drafts.append(draft)
+
+        # create edge
+        edge = edge = BrightEdge(
+            stars=draft.edge,
+            prominence=draft.prominence,
+            shadow=draft.shadow,
+            draft=draft.pick,
+            group=draft.group,
+        )
+        sky.edges[edge.stars] = edge
+
+        # mark this edges rival as infinity to prevent it being picked again
+        rivals[u, v] = np.inf
+        shadows[u, v] = np.inf
+
+        # print(draft)
+
+    if lonely_stars:
+        raise RuntimeError(
+            f"ran out of draft steps with {len(lonely_stars)} stars left"
+        )
+
+    # build groups
+    for group_number, group in groups.items():
+        group_stars: set[int] = set()
+        group_edges: set[tuple[int, int]] = set()
+        for edge in group:
+            group_catalog_edge: tuple[int, int] = (
+                sorted_stars[edge[0]].number,
+                sorted_stars[edge[1]].number,
             )
-            groups.append(group)
-
-        return stars, edges, groups
-
-    def segment(self, max_magnitude: float = 2.0) -> None:
-        numbers, edges = self._gen_edges(max_magnitude=max_magnitude)
-
-        count: int = len(numbers)
-
-        self._numbers = numbers
-        self._edges = edges
-        self._groups = []
-        self._members = {}
-
-        lonely_stars: set[int] = set([i for i in range(count)])
-
-        while len(lonely_stars) > 0:
-            brightest: tuple[int, ...] = tuple(
-                [
-                    int(i)
-                    for i in np.unravel_index(np.argmin(edges), edges.shape)
-                ]
-            )
-            assert len(brightest) == 2
-
-            edge: SegmenterEdge = self._edges[brightest]
-
-            group_index: int | None = None
-            separate_groups: bool = False
-            group: set[tuple[int, int]] = set()
-            for i in brightest:
-                # check if either star is already in a group
-                if i in self._members:
-                    # if both vertices of edge are already in separate groups
-                    # dont add this edge to either
-                    if group_index is not None:
-                        if group_index != self._members[i]:
-                            separate_groups = True
-
-                    group_index = self._members[i]
-
-            edge.now_bright = None
-            if not separate_groups:
-                if group_index is None:
-                    group_index = len(self._groups)
-                    self._groups.append(group)
-                else:
-                    group = self._groups[group_index]
-
-                group.add(brightest)
-                edge.group = group_index
-
-                # remove stars from lonely stars set
-                # & add group to members index
-                for i in brightest:
-                    # remove both vertices from lonely stars set
-                    lonely_stars.discard(i)
-                    self._members[i] = group_index
-
-    def _gen_edges(
-        self, max_magnitude: float = 2.0
-    ) -> tuple[list[int], np.ndarray]:
-        # get list of stars below given magnitude & sorted by magnitude
-        stars = sorted(
-            [star for star in self._catalog if star.magnitude <= max_magnitude],
-            key=attrgetter("magnitude"),
+            group_stars |= set(group_catalog_edge)
+            group_edges.add(group_catalog_edge)
+        bright_group = BrightGroup(
+            number=group_number,
+            stars=frozenset(group_stars),
+            edges=frozenset(group_edges),
         )
-        count = len(stars)
+        sky.groups[bright_group.number] = bright_group
 
-        # break up star attributes into a list of star #s & two numpy arrays
-        numbers: list[int] = [star.number for star in stars]
-        magnitudes = np.array(
-            [star.magnitude + 1.5 for star in stars], dtype=float
+    return sky
+
+
+def _get_prominence_matrix(
+    sorted_stars: list[BrightStar],
+    magnitude_power: float,
+    distance_power: float,
+    distance_coefficient: float,
+) -> np.ndarray:
+    """get matrix of edge prominences (where lowest value is most prominent)
+
+    prominence is calculated from:
+    - sum of brightness magnitude of each star in pair (lower is brighter)
+    - distance between stars (greater distance reduces prominence)
+    """
+    count: int = len(sorted_stars)
+
+    #
+    # vectorized calculation of pairwise magnitude"""
+    #
+
+    magnitudes = np.array(
+        [star.magnitude + 1.5 for star in sorted_stars], dtype=float
+    )
+
+    mags = magnitudes.reshape(1, count)
+    pairwise_magnitudes = mags + mags.T
+
+    #
+    # vectorized calculation of distance
+    #
+
+    coords = np.array(
+        [
+            [star.coords.right_ascension, star.coords.declination]
+            for star in sorted_stars
+        ],
+        dtype=float,
+    )
+    ras = coords[:, 0].reshape(1, count)
+    declinations = coords[:, 1].reshape(1, count)
+
+    dec_sin = np.sin(declinations)
+    pairwise_dec_sin = dec_sin * dec_sin.T
+
+    dec_cos = np.cos(declinations)
+    pairwise_dec_cos = dec_cos * dec_cos.T
+    ras_delta = np.abs(ras - ras.T)
+
+    pairwise_ra_diff_cos = np.cos(
+        np.minimum(ras_delta, (2 * np.pi) - ras_delta)
+    )
+
+    distances = np.arccos(
+        np.minimum(
+            1.0,
+            pairwise_dec_sin + (pairwise_dec_cos * pairwise_ra_diff_cos),
         )
-        coords = np.array(
-            [
-                [star.coords.right_ascension, star.coords.declination]
-                for star in stars
-            ],
-            dtype=float,
-        )
+    )
 
-        # vectorized calculation of pairwise magnitude
-        mags = magnitudes.reshape(1, magnitudes.size)
-        pairwise_magnitudes = mags + mags.T
+    #
+    # vectorized calculation of prominence
+    #
+    prominences = np.add(
+        np.power(pairwise_magnitudes, magnitude_power),
+        np.multiply(
+            np.power(distances, distance_power),
+            distance_coefficient,
+        ),
+    )
 
-        # vectorized calculation of distance
-        ras = coords[:, 0].reshape(1, count)
-        declinations = coords[:, 1].reshape(1, count)
-
-        dec_sin = np.sin(declinations)
-        pairwise_dec_sin = dec_sin * dec_sin.T
-
-        dec_cos = np.cos(declinations)
-        pairwise_dec_cos = dec_cos * dec_cos.T
-        ras_delta = np.abs(ras - ras.T)
-
-        pairwise_ra_diff_cos = np.cos(
-            np.minimum(ras_delta, (2 * np.pi) - ras_delta)
-        )
-
-        distances = np.arccos(
-            np.minimum(
-                1.0,
-                pairwise_dec_sin + (pairwise_dec_cos * pairwise_ra_diff_cos),
-            )
-        )
-
-        # vectorized calculation of brightness
-        brights = np.add(
-            np.power(pairwise_magnitudes, self._magnitude_power),
-            np.multiply(
-                np.power(distances, self._distance_power),
-                self._distance_coefficient,
-            ),
-        )
-
-        edges = np.array(
-            [
-                SegmenterEdge(
-                    index=(u, v),
-                    stars=(numbers[u], numbers[v]),
-                    brightness=distances[u, v],
-                    now_bright=distances[u, v],
-                )
-                if u < v
-                else None
-                for u in range(count)
-                for v in range(count)
-            ]
-        ).reshape(count, count)
-
-        return numbers, edges
-
-    @staticmethod
-    def distance(
-        aa: np.float64, az: np.float64, ba: np.float64, bz: np.float64
-    ) -> np.float64:
-        """calculate angular distance between two points on unit sphere
-
-        with polar coords (azimuth, zenith) for two points on the sphere a, b:
-        aa: azimuth a
-        az: zenith a
-        ba: azimuth b
-        bz: zenith b
-
-        distance = arccos(sin(az)sin(bz) + cos(az)cos(bz)cos(ba - aa))
-        """
-        return np.arccos(
-            (np.sin(az) * np.sin(bz))
-            + (np.cos(az) * np.cos(bz) * np.cos(ba - aa))
-        )
+    return prominences
