@@ -2,32 +2,17 @@ import math
 
 import cairo
 
-from astromap.star import BrightStar, BrightEdge, BrightGroup
+from astromap.star import BrightStar, BrightEdge, BrightGroup, BrightSky
 
 
 class BrightStarMap:
     def __init__(
         self,
-        stars: list[BrightStar],
-        edges: list[BrightEdge],
-        groups: list[BrightGroup],
+        sky: BrightSky,
         size: int = 9,
         pad: int = 16,
     ) -> None:
-        # index stars by catalog number
-        self._stars: dict[int, BrightStar] = {}
-        for star in stars:
-            self._stars[star.number] = star
-
-        # index edges by vertex star number tuple
-        self._edges: dict[tuple[int, int], BrightEdge] = {}
-        for edge in edges:
-            self._edges[edge.stars] = edge
-
-        # index constellations by group number
-        self._groups: dict[int, BrightGroup] = {}
-        for group in groups:
-            self._groups[group.number] = group
+        self._sky = sky
 
         # size of rendered image in pixels
         self._map_px_size: int = 2**size
@@ -75,10 +60,10 @@ class BrightStarMap:
         context.fill()
         context.restore()
 
-        for edge in self._edges.values():
+        for edge in self._sky.edges.values():
             context.save()
-            star_a: BrightStar = self._stars[edge.stars[0]]
-            star_b: BrightStar = self._stars[edge.stars[1]]
+            star_a: BrightStar = self._sky.stars[edge.stars[0]]
+            star_b: BrightStar = self._sky.stars[edge.stars[1]]
             self.render_edge(
                 context,
                 self.coords_from_star(star_a),
@@ -89,7 +74,7 @@ class BrightStarMap:
 
         context.set_source_rgba(*self._star_color)
         context.set_line_width(self._star_stroke)
-        for star in self._stars.values():
+        for star in self._sky.stars.values():
             # push context & translate to center of star
             context.save()
             context.translate(*self.coords_from_star(star))

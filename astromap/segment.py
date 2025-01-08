@@ -2,7 +2,7 @@
 implements constellation segmentation algorithm
 
 edge_brightness = (((a.magnitude + b.magnitude) ** magnitude_power)
-+ ((distance(a, b) ** distance_power) ** distance_coefficient))
++ ((distance(a, b) * distance_coefficient) ** distance_power))
 
 edge_priority = edge_brightness + (rival_coefficient / rival_brightness)
 
@@ -23,6 +23,7 @@ from os import sep
 from sys import displayhook
 from typing import Self
 import numpy as np
+import math
 
 from astromap.star import (
     BrightStar,
@@ -36,10 +37,12 @@ from astromap.catalog import BrightStarCatalog
 
 def segment(
     stars: list[BrightStar],
+    magnitude_offset: float = 1.5,
     magnitude_power: float = 1.0,
     distance_power: float = 2.0,
-    distance_coefficient: float = 512.0,
+    distance_coefficient: float = 4.0,
     rival_coefficient: float = 16.0,
+    lonely_ratio: float = 0.2,
 ) -> BrightSky:
     """segment stars into groups by brightness & distance"""
     sky: BrightSky = BrightSky()
@@ -59,6 +62,7 @@ def segment(
     # get matrix of edge prominences (where lowest value is most prominent)
     prominences: np.ndarray = _get_prominence_matrix(
         sorted_stars,
+        magnitude_offset=magnitude_offset,
         magnitude_power=magnitude_power,
         distance_power=distance_power,
         distance_coefficient=distance_coefficient,
@@ -81,13 +85,13 @@ def segment(
     # print(shadows)
 
     # draft edges by minimum shadow prominence until all stars are drafted
+    lonely_limit: int = math.floor(len(sorted_stars) * lonely_ratio)
     lonely_stars: set[int] = set(range(len(sorted_stars)))
     grouped_stars: dict[int, int] = {}  # sorted index: group number
-    grouped_edges: dict[tuple[int, int], int] = {}  # edge tuple: group number
     groups: dict[int, set[tuple[int, int]]] = {}
     next_draft: int = 0
     next_group: int = 0
-    while len(lonely_stars) > 0 and next_draft < (2**16):
+    while len(lonely_stars) > lonely_limit and next_draft < (2**16):
         # find next minimum shadow prominence in matrix
         u, v = (
             int(i) for i in np.unravel_index(np.argmin(shadows), shadows.shape)
@@ -108,44 +112,40 @@ def segment(
         # - if both stars are grouped merge groups to min group
         # - if one star is grouped add to existing group
         # - if neither star is grouped create new group with next group number
-        group_number: int | None = (
-            None if u not in grouped_stars else grouped_stars[u]
-        )
-        if v in grouped_stars:
-            if group_number is None:
-                group_number = grouped_stars[v]
+        group_number: int | None = None
 
-            # if both stars are in different groups merge to minimum
-            if group_number != grouped_stars[v]:
-                merge_group_number: int = max(group_number, grouped_stars[v])
-                group_number = min(group_number, grouped_stars[v])
+        # if neither is grouped create new group
+        if u not in grouped_stars and v not in grouped_stars:
+            group_number = next_group
+            next_group += 1
+            groups[group_number] = set()
 
-                merge_group: set[tuple[int, int]] = groups[merge_group_number]
-                groups[group_number] |= groups[merge_group_number]
-                groups.pop(merge_group_number)
+        # if both are grouped and in different groups merge groups
+        elif u in grouped_stars and v in grouped_stars:
+            if grouped_stars[u] != grouped_stars[v]:
+                merge_number: int = max(grouped_stars[u], grouped_stars[v])
+                group_number = min(grouped_stars[u], grouped_stars[v])
+
+                merge_group: set[tuple[int, int]] = groups[merge_number]
+                groups[group_number] |= groups[merge_number]
+                groups.pop(merge_number)
                 for p, q in merge_group:
                     grouped_stars[p] = group_number
                     grouped_stars[q] = group_number
-                    grouped_edges[p, q] = group_number
                     merge_catalog_edge: tuple[int, int] = (
                         sorted_stars[p].number,
                         sorted_stars[q].number,
                     )
                     sky.edges[merge_catalog_edge].group = group_number
 
-        if group_number is None:
-            group_number = next_group
-            next_group += 1
-            groups[group_number] = set()
-
-        # add this edge to stars & groups
-        grouped_stars[u] = group_number
-        grouped_stars[v] = group_number
-        grouped_edges[u, v] = group_number
-        groups[group_number].add((u, v))
+        # if only one is in group add to that group
+        elif u in grouped_stars:
+            group_number = grouped_stars[u]
+        elif v in grouped_stars:
+            group_number = grouped_stars[v]
 
         # record draft
-        draft = BrightDraft(
+        draft: BrightDraft = BrightDraft(
             pick=next_draft,
             edge=catalog_edge,
             group=group_number,
@@ -155,15 +155,19 @@ def segment(
         next_draft += 1
         sky.drafts.append(draft)
 
-        # create edge
-        edge = edge = BrightEdge(
-            stars=draft.edge,
-            prominence=draft.prominence,
-            shadow=draft.shadow,
-            draft=draft.pick,
-            group=draft.group,
-        )
-        sky.edges[edge.stars] = edge
+        # if we have a group number create edge
+        if group_number is not None:
+            grouped_stars[u] = group_number
+            grouped_stars[v] = group_number
+            groups[group_number].add((u, v))
+            edge = edge = BrightEdge(
+                stars=draft.edge,
+                prominence=draft.prominence,
+                shadow=draft.shadow,
+                draft=draft.pick,
+                group=draft.group,
+            )
+            sky.edges[edge.stars] = edge
 
         # mark this edges rival as infinity to prevent it being picked again
         rivals[u, v] = np.inf
@@ -171,7 +175,7 @@ def segment(
 
         # print(draft)
 
-    if lonely_stars:
+    if len(lonely_stars) > lonely_limit:
         raise RuntimeError(
             f"ran out of draft steps with {len(lonely_stars)} stars left"
         )
@@ -199,6 +203,7 @@ def segment(
 
 def _get_prominence_matrix(
     sorted_stars: list[BrightStar],
+    magnitude_offset: float,
     magnitude_power: float,
     distance_power: float,
     distance_coefficient: float,
@@ -216,7 +221,7 @@ def _get_prominence_matrix(
     #
 
     magnitudes = np.array(
-        [star.magnitude + 1.5 for star in sorted_stars], dtype=float
+        [star.magnitude + magnitude_offset for star in sorted_stars], dtype=float
     )
 
     mags = magnitudes.reshape(1, count)
@@ -259,9 +264,9 @@ def _get_prominence_matrix(
     #
     prominences = np.add(
         np.power(pairwise_magnitudes, magnitude_power),
-        np.multiply(
-            np.power(distances, distance_power),
-            distance_coefficient,
+        np.power(
+            np.multiply(distances, distance_coefficient),
+            distance_power,
         ),
     )
 
