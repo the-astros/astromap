@@ -171,7 +171,20 @@ def segment(
 
         # mark this edges rival as infinity to prevent it being picked again
         rivals[u, v] = np.inf
-        shadows[u, v] = np.inf
+
+        # mark rival columns
+        for u_ in range(v):
+            column_rival: float = rival_coefficient / prominences[u_, v]
+            rivals[:, u_] = np.maximum(rivals[:, u_], column_rival)
+
+        # mark rival rows
+        for v_ in range(u, rivals.shape[0]):
+            row_rival: float = rival_coefficient / prominences[u, v_]
+            rivals[v_, :] = np.maximum(rivals[v_, :], row_rival)
+
+        # recalculate shadows from rivals
+        shadows = prominences + rivals
+
 
         # print(draft)
 

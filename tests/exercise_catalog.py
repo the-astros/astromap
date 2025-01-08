@@ -16,13 +16,15 @@ log_path = Path(__file__).parent / ".." / "build" / "exercise_catalog_log.txt"
 
 with open(log_path, "w") as log_file:
     sky: BrightSky | None = None
-    star_count: int = 2000
+    star_count: int = 300
     magnitude_offset: float = 1.5
     magnitude_power: float = 1.0
-    initial_distance_power: float = 1.7
-    initial_distance_coefficient: float = 56.0
+    # distance_power: float = 2.0
+    # initial_distance_power: float = 2.0
+    distance_coefficient: float = 128.0
+    # initial_distance_coefficient: float = 64.0
     # initial_lonely_ratio: float = 0.0
-    lonely_ratio: float = 0.2
+    lonely_ratio: float = 0.1
     max_group = {
         "ten_plus": 0,
         "median": 0,
@@ -35,15 +37,21 @@ with open(log_path, "w") as log_file:
     }
     # for magnitude_power_step in range(3):
     #     magnitude_power += 0.1
-    distance_power = initial_distance_power
-    for distance_power_step in range(4):
-        distance_power += 0.1
-        distance_coefficient = initial_distance_coefficient
-        for distance_coefficient_step in range(6):
-            distance_coefficient += 8.0
+
+    #     distance_coefficient = initial_distance_coefficient
+    #     for distance_coefficient_step in range(6):
+    #         distance_coefficient += 8.0
             # lonely_ratio = initial_lonely_ratio
             # for lonely_ratio_step in range(5):
             #     lonely_ratio += 0.1
+
+    distance_power = 1.7
+    for distance_power_step in range(6):
+        distance_power += 0.1    
+
+        rival_coefficient: float = 512
+        for rival_step in range(20):
+            rival_coefficient = rival_coefficient * 1.2
 
             stars: list[BrightStar] = [
                 catalog.bright(i) for i in range(star_count)
@@ -54,6 +62,7 @@ with open(log_path, "w") as log_file:
                 magnitude_power=magnitude_power,
                 distance_power=distance_power,
                 distance_coefficient=distance_coefficient,
+                rival_coefficient=rival_coefficient,
                 lonely_ratio=lonely_ratio,
             )
 
@@ -90,16 +99,18 @@ with open(log_path, "w") as log_file:
                 max_group["magnitude_power"] = magnitude_power
                 max_group["distance_power"] = distance_power
                 max_group["distance_coefficient"] = distance_coefficient
+                max_group["rival_coefficient"] = rival_coefficient
                 max_group["lonely_ratio"] = lonely_ratio
 
                 print(f"new max group: {max_group}")
                 print(f"new max group: {max_group}", file=log_file)
 
-            if ten_plus > 5:
+            if ten_plus > 3:
                 print(
                     f"\n{star_count}, {magnitude_offset}, "
                     f"{magnitude_power}, {distance_power}, "
-                    f"{distance_coefficient}, {lonely_ratio}"
+                    f"{distance_coefficient}, {rival_coefficient}, "
+                    f"{lonely_ratio}"
                     f"\n\tnumber: {len(stats)}"
                     f" 3+: {three_plus}"
                     f" 5+: {five_plus}"
@@ -110,11 +121,12 @@ with open(log_path, "w") as log_file:
                     f"\n\tgroups: {stats}"
                 )
 
-            if ten_plus > 7:
+            if ten_plus > 5:
                 print(
                     f"\n{star_count}, {magnitude_offset}, "
                     f"{magnitude_power}, {distance_power}, "
-                    f"{distance_coefficient}, {lonely_ratio}"
+                    f"{distance_coefficient}, {rival_coefficient}, "
+                    f"{lonely_ratio}"
                     f"\n\tnumber: {len(stats)}"
                     f" 3+: {three_plus}"
                     f" 5+: {five_plus}"
