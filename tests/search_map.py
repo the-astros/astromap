@@ -36,13 +36,13 @@ def render(sky: BrightSky):
     distance_coefficient_base,
     rival_coefficient_base,
     lonely_ratio_base,
-) = [350, 1.5, 1.0, 2.0, 64.0, 18, 0.03]
+) = [330, 1.5, 1.0, 2.0, 64.0, 18, 0.03]
 
 max_five_plus = 0
 max_group = None
 max_groups = []
 
-for distance_step, rival_step, lonely_step in np.ndindex(16, 24, 12):
+for distance_step, rival_step, lonely_step in np.ndindex(16, 18, 24):
     distance_coefficient = distance_coefficient_base + (distance_step * 64.0)
     rival_coefficient = 1.5 ** (rival_coefficient_base + rival_step)
     lonely_ratio = lonely_ratio_base + (lonely_step * 0.01)
@@ -93,13 +93,12 @@ for distance_step, rival_step, lonely_step in np.ndindex(16, 24, 12):
     if five_plus > max_five_plus:
         max_five_plus = five_plus
         max_group = group_data
-        print("\n***new max***")
+        print(f"\n***five up: five plus: {five_plus} max_stars: {max_stars}")
 
     if max_stars < star_count / 10 and (
-        five_plus > max_five_plus or five_plus > star_count / 20
+        five_plus >= max_five_plus or five_plus > star_count / 20
     ):
-        print(f"\tfive plus: {five_plus}")
-        print(f"\tmax_stars: {max_stars}")
+        print(f"\n*new group: five plus: {five_plus} max_stars: {max_stars}")
         print(f"\tgroups: {groups}")
 
         max_groups.append(group_data)
