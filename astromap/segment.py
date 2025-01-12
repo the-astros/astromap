@@ -66,13 +66,18 @@ def segment(
     # for i, star in enumerate(sorted_stars):
     #     print(f"{i}: {star}")
 
-    # get matrix of edge prominences (where lowest value is most prominent)
-    prominences: np.ndarray = _get_prominence_matrix(
-        sorted_stars,
-        magnitude_offset=magnitude_offset,
-        magnitude_power=magnitude_power,
-        distance_power=distance_power,
-        distance_coefficient=distance_coefficient,
+    pairwise_magnitudes: np.ndarray = _get_magnitude_matrix(sorted_stars)
+    distances: np.ndarray = _get_distance_matrix(sorted_stars)
+
+    #
+    # vectorized calculation of prominence from pairwise magnitudes & distances
+    #
+    prominences = np.add(
+        np.power(pairwise_magnitudes + (2 * magnitude_offset), magnitude_power),
+        np.power(
+            np.multiply(distances, distance_coefficient),
+            distance_power,
+        ),
     )
 
     # initialize matrix of rival prominences for each edge to calculate shadows
@@ -180,9 +185,13 @@ def segment(
         shadows[u, v] = np.inf
 
         # mark rivals and then recalculate shadows
+        # - multiply distance by coefficent to minimize rival penalty for very
+        #   near neighbors
         # - mark rivals in both directions ([u, v] + [v, u]) so we can
         #   get all rivals by summing a column
-        rival_prominence: float = rival_coefficient / prominences[u, v]
+        rival_prominence: float = (
+            distances[u, v] * rival_coefficient / prominences[u, v]
+        )
         rivals[u, v] = rival_prominence
         rivals[v, u] = rival_prominence
 
@@ -241,36 +250,22 @@ def segment(
     return sky
 
 
-def _get_prominence_matrix(
-    sorted_stars: list[BrightStar],
-    magnitude_offset: float,
-    magnitude_power: float,
-    distance_power: float,
-    distance_coefficient: float,
-) -> np.ndarray:
-    """get matrix of edge prominences (where lowest value is most prominent)
-
-    prominence is calculated from:
-    - sum of brightness magnitude of each star in pair (lower is brighter)
-    - distance between stars (greater distance reduces prominence)
-    """
-    count: int = len(sorted_stars)
-
-    #
-    # vectorized calculation of pairwise magnitude"""
-    #
+def _get_magnitude_matrix(sorted_stars: list[BrightStar]) -> np.ndarray:
+    """vectorized calculation of pairwise magnitude"""
 
     magnitudes = np.array(
-        [star.magnitude + magnitude_offset for star in sorted_stars],
+        [star.magnitude for star in sorted_stars],
         dtype=float,
     )
 
-    mags = magnitudes.reshape(1, count)
+    mags = magnitudes.reshape(1, len(sorted_stars))
     pairwise_magnitudes = mags + mags.T
 
-    #
-    # vectorized calculation of distance
-    #
+    return pairwise_magnitudes
+
+
+def _get_distance_matrix(sorted_stars: list[BrightStar]) -> np.ndarray:
+    """vectorized calculation of distance"""
 
     coords = np.array(
         [
@@ -279,8 +274,8 @@ def _get_prominence_matrix(
         ],
         dtype=float,
     )
-    ras = coords[:, 0].reshape(1, count)
-    declinations = coords[:, 1].reshape(1, count)
+    ras = coords[:, 0].reshape(1, len(sorted_stars))
+    declinations = coords[:, 1].reshape(1, len(sorted_stars))
 
     dec_sin = np.sin(declinations)
     pairwise_dec_sin = dec_sin * dec_sin.T
@@ -300,15 +295,4 @@ def _get_prominence_matrix(
         )
     )
 
-    #
-    # vectorized calculation of prominence
-    #
-    prominences = np.add(
-        np.power(pairwise_magnitudes, magnitude_power),
-        np.power(
-            np.multiply(distances, distance_coefficient),
-            distance_power,
-        ),
-    )
-
-    return prominences
+    return distances

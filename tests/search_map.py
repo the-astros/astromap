@@ -18,9 +18,10 @@ def render(sky: BrightSky):
     image_path = str(
         (
             image_build_path
-            / f"map-rivalv2-{star_count}-{magnitude_offset}-{magnitude_power}"
-            f"-{distance_power}-{distance_coefficient}-{rival_coefficient}"
-            f"-{lonely_ratio}.png"
+            / f"map-rivalv0.3.0-{star_count}-{magnitude_offset:.1f}"
+            f"-{magnitude_power:.1f}-{distance_power:.1f}"
+            f"-{distance_coefficient:.1f}-{rival_coefficient:.1f}"
+            f"-{lonely_ratio:.2f}.png"
         ).resolve()
     )
 
