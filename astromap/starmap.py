@@ -149,3 +149,39 @@ class BrightStarMap:
         print(f"writing image to '{path}'")
 
         surface.write_to_png(path)
+
+    def render_stars_png(self, path: str) -> None:
+        surface = cairo.ImageSurface(
+            cairo.FORMAT_ARGB32, self._px_width, self._px_height
+        )
+        context = cairo.Context(surface)
+
+        self.render_stars(context)
+
+        print(f"writing image to '{path}'")
+
+        surface.write_to_png(path)
+
+    def render_stars(self, context: cairo.Context) -> None:
+        # set padded & scaled origin
+        context.translate(self._map_px_pad, self._map_px_pad)
+        context.scale(self._map_scale, self._map_scale)
+
+        # draw field
+        context.save()
+        context.set_source_rgba(*self._field_color)
+        context.rectangle(0, 0, math.pi * 2, math.pi)
+        context.fill()
+        context.restore()
+
+        context.set_source_rgba(*self._star_color)
+        context.set_line_width(self._star_stroke)
+        for star in self._sky.stars.values():
+            # push context & translate to center of star
+            context.save()
+            context.translate(*self.coords_from_star(star))
+
+            self.render_star(context, star.magnitude)
+
+            # pop context
+            context.restore()

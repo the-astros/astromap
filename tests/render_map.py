@@ -14,7 +14,7 @@ from astromap.starmap import BrightStarMap
     distance_coefficient,
     rival_coefficient,
     lonely_ratio,
-) = [300, 1.5, 1.0, 2.0, 256.0, 40960.0, 0.1]
+) = [5000, 1.5, 1.0, 2.0, 256.0, 40960.0, 1.0]
 # ) = [300, 1.5, 1.0, 2.0, 128.0, 1274.01984, 0.1]
 # ) = [300, 1.5, 1.0, 2.0, 128.0, 1061.6832, 0.1]
 # ) = [500, 1.5, 1.0, 2.0, 128.0, 1048576.0, 0.1]
@@ -73,3 +73,4 @@ image_path = str(
 
 starmap = BrightStarMap(sky, size=10)
 starmap.render_png(image_path)
+starmap.render_stars_png(image_path)
