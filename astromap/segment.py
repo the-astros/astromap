@@ -45,6 +45,13 @@ def segment(
     lonely_ratio: float = 0.2,
 ) -> BrightSky:
     """segment stars into groups by brightness & distance"""
+    print(
+        f"segment(star_count={len(stars)}"
+        f", magnitude_offset={magnitude_offset}"
+        f", magnitude_power={magnitude_power}, distance_power={distance_power}"
+        f", distance_coefficient={distance_coefficient}"
+        f", rival_coefficient={rival_coefficient}, lonely_ratio={lonely_ratio})"
+    )
     sky: BrightSky = BrightSky()
 
     # add stars to sky by catalog number
@@ -72,16 +79,16 @@ def segment(
     # - shadows are only calculated once for each edge where u < v
     # - all rival edges where u >= v are initialized to infinity
     # - edges where u < v are initialized to zero
-    rivals: np.ndarray = np.full(prominences.shape, np.inf, dtype=np.float64)
-    for u, v in np.ndindex(prominences.shape):
+    rivals: np.ndarray = np.zeros(prominences.shape, dtype=np.float64)
+    shadows: np.ndarray = np.full(prominences.shape, np.inf, dtype=np.float64)
+    for u, v in np.ndindex(shadows.shape):
         if u < v:
-            rivals[u, v] = 0.0
-    shadows = prominences + rivals
+            shadows[u, v] = prominences[u, v]
 
-    # print("rivals:")
+    # print("initial rivals:")
     # print(rivals)
 
-    # print("shadows:")
+    # print("initial shadows:")
     # print(shadows)
 
     # draft edges by minimum shadow prominence until all stars are drafted
@@ -160,7 +167,7 @@ def segment(
             grouped_stars[u] = group_number
             grouped_stars[v] = group_number
             groups[group_number].add((u, v))
-            edge = edge = BrightEdge(
+            edge = BrightEdge(
                 stars=draft.edge,
                 prominence=draft.prominence,
                 shadow=draft.shadow,
@@ -169,22 +176,38 @@ def segment(
             )
             sky.edges[edge.stars] = edge
 
-        # mark this edges rival as infinity to prevent it being picked again
-        rivals[u, v] = np.inf
+        # mark this edges shadow as infinity to prevent it being picked again
+        shadows[u, v] = np.inf
 
-        # mark rival columns
-        for u_ in range(v):
-            column_rival: float = rival_coefficient / prominences[u_, v]
-            rivals[:, u_] = np.maximum(rivals[:, u_], column_rival)
+        # mark rivals and then recalculate shadows
+        # - mark rivals in both directions ([u, v] + [v, u]) so we can
+        #   get all rivals by summing a column
+        rival_prominence: float = rival_coefficient / prominences[u, v]
+        rivals[u, v] = rival_prominence
+        rivals[v, u] = rival_prominence
 
-        # mark rival rows
-        for v_ in range(u, rivals.shape[0]):
-            row_rival: float = rival_coefficient / prominences[u, v_]
-            rivals[v_, :] = np.maximum(rivals[v_, :], row_rival)
+        # get sum of all rivals to each star and then add together with
+        # the prominence to get each shadowed prominence
+        rival_sums = np.sum(rivals, axis=0)
 
-        # recalculate shadows from rivals
-        shadows = prominences + rivals
-
+        # recalculate shadows for all edges that share a star with current edge
+        # and havent been drafted
+        for u_ in range(shadows.shape[0]):
+            shadow_edge = (u_, v) if u_ < v else (v, u_)
+            if shadows[shadow_edge] < np.inf:
+                # print(f"old shadow {shadow_edge}: {shadows[shadow_edge]}")
+                shadows[shadow_edge] = (
+                    prominences[shadow_edge] + rival_sums[u_] + rival_sums[v]
+                )
+                # print(f"new shadow {shadow_edge}: {shadows[shadow_edge]}")
+        for v_ in range(shadows.shape[1]):
+            shadow_edge = (u, v_) if u < v_ else (v_, u)
+            if shadows[shadow_edge] < np.inf:
+                # print(f"old shadow {shadow_edge}: {shadows[shadow_edge]}")
+                shadows[shadow_edge] = (
+                    prominences[shadow_edge] + rival_sums[u] + rival_sums[v_]
+                )
+                # print(f"new shadow {shadow_edge}: {shadows[shadow_edge]}")
 
         # print(draft)
 
@@ -192,6 +215,10 @@ def segment(
         raise RuntimeError(
             f"ran out of draft steps with {len(lonely_stars)} stars left"
         )
+
+    # for u, v in np.ndindex(prominences.shape):
+    #     if u < v:
+    #         print(f"{u}, {v}: {prominences[u, v]} -> {shadows[u, v]}")
 
     # build groups
     for group_number, group in groups.items():
@@ -234,7 +261,8 @@ def _get_prominence_matrix(
     #
 
     magnitudes = np.array(
-        [star.magnitude + magnitude_offset for star in sorted_stars], dtype=float
+        [star.magnitude + magnitude_offset for star in sorted_stars],
+        dtype=float,
     )
 
     mags = magnitudes.reshape(1, count)
