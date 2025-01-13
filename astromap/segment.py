@@ -42,15 +42,15 @@ def segment(
     distance_power: float = 2.0,
     distance_coefficient: float = 4.0,
     rival_coefficient: float = 16.0,
-    lonely_ratio: float = 0.2,
 ) -> BrightSky:
     """segment stars into groups by brightness & distance"""
     print(
-        f"segment(star_count={len(stars)}"
-        f", magnitude_offset={magnitude_offset}"
-        f", magnitude_power={magnitude_power}, distance_power={distance_power}"
-        f", distance_coefficient={distance_coefficient}"
-        f", rival_coefficient={rival_coefficient}, lonely_ratio={lonely_ratio})"
+        f"segment-v0.4.0(star_count={len(stars)}"
+        f", magnitude_offset={magnitude_offset:.1f}"
+        f", magnitude_power={magnitude_power:.1f}"
+        f", distance_power={distance_power:.1f}"
+        f", distance_coefficient={distance_coefficient:.1f}"
+        f", rival_coefficient={rival_coefficient:.1f})"
     )
     sky: BrightSky = BrightSky()
 
@@ -97,13 +97,12 @@ def segment(
     # print(shadows)
 
     # draft edges by minimum shadow prominence until all stars are drafted
-    lonely_limit: int = math.floor(len(sorted_stars) * lonely_ratio)
     lonely_stars: set[int] = set(range(len(sorted_stars)))
     grouped_stars: dict[int, int] = {}  # sorted index: group number
     groups: dict[int, set[tuple[int, int]]] = {}
     next_draft: int = 0
     next_group: int = 0
-    while len(lonely_stars) > lonely_limit and next_draft < (2**16):
+    while len(lonely_stars) > 0 and next_draft < (2**16):
         # find next minimum shadow prominence in matrix
         u, v = (
             int(i) for i in np.unravel_index(np.argmin(shadows), shadows.shape)
@@ -181,6 +180,37 @@ def segment(
             )
             sky.edges[edge.stars] = edge
 
+            # calculate draft score
+            group_count: dict[int, int] = {}  # sorted index: star count
+            for group in grouped_stars.values():
+                if group not in group_count:
+                    group_count[group] = 0
+                group_count[group] += 1
+            for count in group_count.values():
+                if count > draft.max_count:
+                    draft.max_count = count
+                if count >= 5:
+                    draft.score += 1
+                    draft.five_plus += 1
+                if count >= 10:
+                    draft.score += 1
+                    draft.ten_plus += 1
+                if count >= 15:
+                    draft.score += 1
+                if count >= 20:
+                    draft.score -= 2
+                if count >= 25:
+                    draft.score -= 5
+                if count >= 30:
+                    draft.score -= 10
+                if count >= 35:
+                    draft.score -= 10
+                if count >= 40:
+                    draft.score -= 10
+            if draft.score > sky.score:
+                sky.score = draft.score
+                sky.max_draft = draft.pick
+
         # mark this edges shadow as infinity to prevent it being picked again
         shadows[u, v] = np.inf
 
@@ -190,7 +220,7 @@ def segment(
         # - mark rivals in both directions ([u, v] + [v, u]) so we can
         #   get all rivals by summing a column
         rival_prominence: float = (
-            distances[u, v] * rival_coefficient / prominences[u, v]
+            (distances[u, v] ** 2.0) * rival_coefficient / prominences[u, v]
         )
         rivals[u, v] = rival_prominence
         rivals[v, u] = rival_prominence
@@ -220,7 +250,7 @@ def segment(
 
         # print(draft)
 
-    if len(lonely_stars) > lonely_limit:
+    if len(lonely_stars) > 0:
         raise RuntimeError(
             f"ran out of draft steps with {len(lonely_stars)} stars left"
         )
@@ -229,7 +259,8 @@ def segment(
     #     if u < v:
     #         print(f"{u}, {v}: {prominences[u, v]} -> {shadows[u, v]}")
 
-    # build groups
+
+    # build groups up to edges found at max draft score
     for group_number, group in groups.items():
         group_stars: set[int] = set()
         group_edges: set[tuple[int, int]] = set()
@@ -238,14 +269,23 @@ def segment(
                 sorted_stars[edge[0]].number,
                 sorted_stars[edge[1]].number,
             )
-            group_stars |= set(group_catalog_edge)
-            group_edges.add(group_catalog_edge)
+            # only add edges up to max draft pick & remove rest
+            if sky.edges[group_catalog_edge].draft <= sky.max_draft:
+                group_stars |= set(group_catalog_edge)
+                group_edges.add(group_catalog_edge)
+            else:
+                sky.edges.pop(group_catalog_edge)
         bright_group = BrightGroup(
             number=group_number,
             stars=frozenset(group_stars),
             edges=frozenset(group_edges),
         )
         sky.groups[bright_group.number] = bright_group
+
+    max_draft = sky.drafts[sky.max_draft]
+    print(f"sky score: {sky.score} max draft: {max_draft.pick}"
+        f" max count: {max_draft.max_count}"
+        f" fives: {max_draft.five_plus} tens: {max_draft.ten_plus}")
 
     return sky
 

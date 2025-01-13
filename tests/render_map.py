@@ -13,8 +13,9 @@ from astromap.starmap import BrightStarMap
     distance_power,
     distance_coefficient,
     rival_coefficient,
-    lonely_ratio,
-) = [330, 1.5, 1.0, 2.0, 64.0, 25251.2, 0.02]
+) = [330, 1.5, 1.0, 2.0, 64.0, 287626.5]
+# ) = [330, 1.5, 1.0, 2.0, 64.0, 25251.2, 0.03]
+# ) = [330, 1.5, 1.0, 2.0, 64.0, 25251.2, 0.02]
 # ) = [330, 1.5, 1.0, 2.0, 64.0, 2048, 0.03]
 # ) = [300, 1.5, 1.0, 2.0, 256.0, 2.0 ** 18, 0.1]
 # ) = [300, 1.5, 1.0, 2.0, 256.0, 2.0 ** 16, 0.15]
@@ -40,7 +41,6 @@ sky = segment(
     distance_power=distance_power,
     distance_coefficient=distance_coefficient,
     rival_coefficient=rival_coefficient,
-    lonely_ratio=lonely_ratio,
 )
 
 image_build_path = Path(__file__).parent / ".." / "build"
@@ -53,9 +53,8 @@ except FileExistsError:
 image_path = str(
     (
         image_build_path
-        / f"map-rivalv0.3.0-{star_count}-{magnitude_offset}-{magnitude_power}"
-        f"-{distance_power}-{distance_coefficient}-{rival_coefficient}"
-        f"-{lonely_ratio}.png"
+        / f"map-rivalv0.4.0-{star_count}-{magnitude_offset}-{magnitude_power}"
+        f"-{distance_power}-{distance_coefficient}-{rival_coefficient}.png"
     ).resolve()
 )
 

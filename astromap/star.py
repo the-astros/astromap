@@ -114,6 +114,10 @@ class BrightDraft:
     group: int | None
     prominence: float
     shadow: float
+    score: int = 0
+    five_plus: int = 0
+    ten_plus: int = 0
+    max_count: int = 0
 
 
 @dataclass
@@ -129,3 +133,7 @@ class BrightSky:
 
     # record of edge drafts
     drafts: list[BrightDraft] = field(default_factory=list)
+
+    # score for searching for best sky segmentation
+    score: int = -1
+    max_draft: int = -1
