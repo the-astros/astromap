@@ -344,6 +344,16 @@ files = [
 ]
 
 [[package]]
+name = "pysqlite3"
+version = "0.5.4"
+description = "DB-API 2.0 interface for Sqlite 3.x"
+optional = false
+python-versions = "*"
+files = [
+    {file = "pysqlite3-0.5.4.tar.gz", hash = "sha256:fbc69bfdc0cb43a5badd5403b126d5151371b5037e0397ba9802bb440c5b0021"},
+]
+
+[[package]]
 name = "pytest"
 version = "8.3.3"
 description = "pytest: simple powerful testing with Python"
@@ -377,4 +387,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "d11530f6e5e0005212253ae43ed36ef35b6e34593d3ee269a2561c8a45db2d1d"
+content-hash = "b5f398f7dd2bbbaa1e2c9fa6cd07b94751dd122c4b917a9c115c1e9d148da0bb"

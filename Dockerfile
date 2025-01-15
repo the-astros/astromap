@@ -9,6 +9,7 @@ RUN apt-get update \
     build-essential \
     cmake \
     libcairo2-dev \
+    libsqlite3-dev \
     nano \
     openssh-client \
     python-is-python3 \
