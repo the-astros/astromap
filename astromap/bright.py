@@ -141,6 +141,29 @@ def celestial_from_proper(
     return (right_ascension, declination)
 
 
+def celestial_distance(a: tuple[float, float], b: tuple[float, float]) -> float:
+    """
+    takes two sets of celestial coords and returns the distance in radians
+
+    a: tuple[float, float] -> [right_ascension, declination] in radians
+    b: tuple[float, float] -> [right_ascension, declination] in radians
+
+    returns: angular distance between a and b in radians
+    """
+    right_ascension_delta = min(
+        abs(a[0] - b[0]),
+        2 * math.pi - abs(a[0] - b[0]),
+    )
+    return math.acos(
+        (math.sin(a[1]) * math.sin(b[1]))
+        + (
+            math.cos(a[1])
+            * math.cos(b[1])
+            * math.cos(right_ascension_delta)
+        )
+    )
+
+
 @dataclass
 class Group:
     """
