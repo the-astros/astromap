@@ -139,3 +139,29 @@ def celestial_from_proper(
     declination: float = math.radians(proper_declination / 3600)
 
     return (right_ascension, declination)
+
+
+@dataclass
+class Group:
+    """
+    a group of neighboring stars that form a constellation
+    """
+    hsh: int  # hash of stars frozenset
+    stars: frozenset[int]  # set of bright star catalog numbers
+
+    def __hash__(self) -> int:
+        return self.hsh
+
+
+@dataclass
+class Sky:
+    """
+    a grouping of stars into constellations
+    """
+    hsh: int  # hash of groups frozenset
+    groups: frozenset[int]  # set of group hashes
+
+    def __hash__(self) -> int:
+        return self.hsh
+
+
