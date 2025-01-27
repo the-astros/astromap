@@ -19,7 +19,17 @@ happy_star: bright.Star = bright.Star(
     motion=(1.454441043328608e-08, -9.696273622190719e-09),
 )
 
+not_a_star_row: str = (
+    r" 182 M 31  And                                     S And    "
+    r"                                                                                                                                        *"
+)
+
 
 def test_happy_star_from_row() -> None:
-    star: bright.Star = bright.star_from_catalog(happy_row)
+    star: bright.Star | None = bright.star_from_catalog(happy_row)
     assert star == happy_star
+
+
+def test_not_a_star_from_row() -> None:
+    star: bright.Star | None = bright.star_from_catalog(not_a_star_row)
+    assert star is None

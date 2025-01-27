@@ -178,10 +178,8 @@ def visit(
     visited_groups: dict[int, bright.Group] = {}  # star index set hash: group
     next_draft: int = 0
     next_group: int = 0
-    while (
-        len(lonely_stars) > 0
-        and len(star_groups) > 1
-        and next_draft < (2**16)
+    while next_draft < (2**16) and (
+        len(lonely_stars) > 0 or len(star_groups) > 1
     ):
         next_draft += 1
 
@@ -228,11 +226,12 @@ def visit(
         elif v in grouped_stars:
             group_number = grouped_stars[v]
 
-        logging.info(
+        logging.debug(
             f"draft {next_draft}:"
-            f" edge ({stars[u].number}, {stars[v].number})"
+            f" edge ({stars[u].catalog}, {stars[v].catalog})"
             f" group {group_number}"
-            f" prominence {prominences[u, v]} shadow {shadows[u, v]}"
+            f" prominence {prominences[u, v]:.1f}"
+            f" shadow {shadows[u, v]:.1f}"
         )
 
         # mark this edges shadow as infinity to prevent it being picked again
@@ -258,7 +257,7 @@ def visit(
                 # - proper group has sets of stars by catalog index
                 if star_group_hash not in visited_groups:
                     catalog_group: frozenset[int] = frozenset(
-                        (stars[i].number for i in star_group)
+                        (stars[i].catalog for i in star_group)
                     )
                     group: bright.Group = bright.Group(
                         hsh=hash(catalog_group), stars=catalog_group

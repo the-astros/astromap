@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import logging
 import math
 
@@ -156,11 +156,7 @@ def celestial_distance(a: tuple[float, float], b: tuple[float, float]) -> float:
     )
     return math.acos(
         (math.sin(a[1]) * math.sin(b[1]))
-        + (
-            math.cos(a[1])
-            * math.cos(b[1])
-            * math.cos(right_ascension_delta)
-        )
+        + (math.cos(a[1]) * math.cos(b[1]) * math.cos(right_ascension_delta))
     )
 
 
@@ -169,6 +165,7 @@ class Group:
     """
     a group of neighboring stars that form a constellation
     """
+
     hsh: int  # hash of stars frozenset
     stars: frozenset[int]  # set of bright star catalog numbers
 
@@ -181,10 +178,9 @@ class Sky:
     """
     a grouping of stars into constellations
     """
+
     hsh: int  # hash of groups frozenset
     groups: frozenset[int]  # set of group hashes
 
     def __hash__(self) -> int:
         return self.hsh
-
-
